@@ -6,6 +6,15 @@
   --bg-hover: #F3F4F6;
   --bg-subtle: #F9FAFB;
 
+  /* Sidebar nav (its own tokens — the rail can stay dark for themes whose
+     page/card surfaces are light, e.g. default, so it isn't tied 1:1 to
+     --bg-page/--bg-card) */
+  --sidebar-text: #9CA3AF;
+  --sidebar-text-hover: #E5E7EB;
+  --sidebar-hover-bg: rgba(255, 255, 255, 0.05);
+  --sidebar-active-bg: rgba(99, 102, 241, 0.22);
+  --sidebar-active-text: #C7D2FE;
+
   /* Borders */
   --border: #E5E7EB;
   --border-strong: #D1D5DB;
@@ -57,6 +66,114 @@
   --sidebar-w-expanded: 224px;
   --topbar-h: 56px;
   --ai-panel-w: 320px;
+}
+
+/* ===== THEMES =====
+   Each block overrides the surface/text/brand tokens declared in :root
+   above. Setting `data-theme` on <html> (see src/lib/theme.js) is all a
+   theme needs to reskin the finance UI end-to-end. */
+:root[data-theme="ocean"] {
+  --bg-page: #F0F7FF;
+  --primary: #0A84FF; --primary-hover: #086FD6;
+  --primary-tint: #E8F4FF; --primary-tint-strong: #D2E9FF;
+  --bg-sidebar: #FFFFFF; --sidebar-text: #5B6B82; --sidebar-text-hover: #0F1115;
+  --sidebar-hover-bg: rgba(10,132,255,0.08); --sidebar-active-bg: #D2E9FF; --sidebar-active-text: #086FD6;
+}
+:root[data-theme="sunset"] {
+  --bg-page: #FFF6F0;
+  --primary: #FF7849; --primary-hover: #F0602E;
+  --primary-tint: #FFEDE3; --primary-tint-strong: #FFD9C2;
+  --bg-sidebar: #FFFFFF; --sidebar-text: #8A6F63; --sidebar-text-hover: #2B1B12;
+  --sidebar-hover-bg: rgba(255,120,73,0.08); --sidebar-active-bg: #FFD9C2; --sidebar-active-text: #F0602E;
+}
+:root[data-theme="forest"] {
+  --bg-page: #F1F9F3;
+  --primary: #1AA260; --primary-hover: #158A51;
+  --primary-tint: #E3F5E9; --primary-tint-strong: #C9EBD4;
+  --bg-sidebar: #FFFFFF; --sidebar-text: #5F7B67; --sidebar-text-hover: #0F1F14;
+  --sidebar-hover-bg: rgba(26,162,96,0.08); --sidebar-active-bg: #C9EBD4; --sidebar-active-text: #158A51;
+}
+:root[data-theme="rose"] {
+  --bg-page: #FFF1F6;
+  --primary: #DB2777; --primary-hover: #BE185D;
+  --primary-tint: #FDE6EF; --primary-tint-strong: #FBD0E1;
+  --bg-sidebar: #FFFFFF; --sidebar-text: #8A5B72; --sidebar-text-hover: #2B0F1B;
+  --sidebar-hover-bg: rgba(219,39,119,0.08); --sidebar-active-bg: #FBD0E1; --sidebar-active-text: #BE185D;
+}
+:root[data-theme="mint"] {
+  --bg-page: #EFFBF8;
+  --primary: #0D9488; --primary-hover: #0B7A70;
+  --primary-tint: #E0F5F2; --primary-tint-strong: #C4EBE5;
+  --bg-sidebar: #FFFFFF; --sidebar-text: #5E7C78; --sidebar-text-hover: #0E1F1C;
+  --sidebar-hover-bg: rgba(13,148,136,0.08); --sidebar-active-bg: #C4EBE5; --sidebar-active-text: #0B7A70;
+}
+:root[data-theme="sand"] {
+  --bg-page: #FBF6EC;
+  --primary: #B45309; --primary-hover: #93400A;
+  --primary-tint: #F5E9D2; --primary-tint-strong: #EBD7AF;
+  --bg-sidebar: #FFFFFF; --sidebar-text: #8A7659; --sidebar-text-hover: #2B2011;
+  --sidebar-hover-bg: rgba(180,83,9,0.08); --sidebar-active-bg: #EBD7AF; --sidebar-active-text: #93400A;
+}
+:root[data-theme="slate"] {
+  --bg-page: #F2F4F7;
+  --primary: #475569; --primary-hover: #334155;
+  --primary-tint: #E7EBF0; --primary-tint-strong: #D3DAE3;
+  --bg-sidebar: #FFFFFF; --sidebar-text: #64748B; --sidebar-text-hover: #1E293B;
+  --sidebar-hover-bg: rgba(71,85,105,0.08); --sidebar-active-bg: #D3DAE3; --sidebar-active-text: #334155;
+}
+:root[data-theme="violet"] {
+  --bg-page: #F6F2FF;
+  --primary: #7C3AED; --primary-hover: #6D28D9;
+  --primary-tint: #EEE5FE; --primary-tint-strong: #DDCCFC;
+  --bg-sidebar: #FFFFFF; --sidebar-text: #7A6B96; --sidebar-text-hover: #1E1533;
+  --sidebar-hover-bg: rgba(124,58,237,0.08); --sidebar-active-bg: #DDCCFC; --sidebar-active-text: #6D28D9;
+}
+
+/* Dark themes flip surfaces, text and borders too. */
+:root[data-theme="midnight"] {
+  --bg-page: #10182B; --bg-card: #182338; --bg-hover: #1E2A42; --bg-subtle: #141E33;
+  --border: #263352; --border-strong: #324268;
+  --text-primary: #F1F5F9; --text-secondary: #C7D2E3; --text-tertiary: #93A2BE; --text-meta: #6B7A99;
+  --primary: #5EA1FF; --primary-hover: #7DB4FF;
+  --primary-tint: #1B2C47; --primary-tint-strong: #223757;
+  --bg-sidebar: #0B1223; --sidebar-text: #93A2BE; --sidebar-text-hover: #F1F5F9;
+  --sidebar-hover-bg: rgba(255,255,255,0.06); --sidebar-active-bg: rgba(94,161,255,0.22); --sidebar-active-text: #9CC5FF;
+}
+:root[data-theme="graphite"] {
+  --bg-page: #1C1C1F; --bg-card: #232327; --bg-hover: #2B2B30; --bg-subtle: #202024;
+  --border: #333338; --border-strong: #45454B;
+  --text-primary: #F2F2F3; --text-secondary: #C7C7CC; --text-tertiary: #94949B; --text-meta: #6C6C73;
+  --primary: #22D3EE; --primary-hover: #06B6D4;
+  --primary-tint: #14343B; --primary-tint-strong: #1A424B;
+  --bg-sidebar: #19191C; --sidebar-text: #94949B; --sidebar-text-hover: #F2F2F3;
+  --sidebar-hover-bg: rgba(255,255,255,0.06); --sidebar-active-bg: rgba(34,211,238,0.20); --sidebar-active-text: #7EE6F5;
+}
+:root[data-theme="carbon"] {
+  --bg-page: #101012; --bg-card: #18181B; --bg-hover: #202023; --bg-subtle: #151517;
+  --border: #2A2A2E; --border-strong: #3A3A40;
+  --text-primary: #F5F5F4; --text-secondary: #D4D4D2; --text-tertiary: #9A9A96; --text-meta: #6E6E6A;
+  --primary: #FBBF24; --primary-hover: #F59E0B;
+  --primary-tint: #3A2F13; --primary-tint-strong: #48390F;
+  --bg-sidebar: #0B0B0D; --sidebar-text: #9A9A96; --sidebar-text-hover: #F5F5F4;
+  --sidebar-hover-bg: rgba(255,255,255,0.06); --sidebar-active-bg: rgba(251,191,36,0.20); --sidebar-active-text: #FFD772;
+}
+:root[data-theme="plum"] {
+  --bg-page: #241833; --bg-card: #2E1E40; --bg-hover: #38264C; --bg-subtle: #291C39;
+  --border: #3E2C54; --border-strong: #503A6C;
+  --text-primary: #F6EEFB; --text-secondary: #D9C4E8; --text-tertiary: #A987C0; --text-meta: #7C5F94;
+  --primary: #E879F9; --primary-hover: #D946EF;
+  --primary-tint: #3A2650; --primary-tint-strong: #472F62;
+  --bg-sidebar: #1D1329; --sidebar-text: #A987C0; --sidebar-text-hover: #F6EEFB;
+  --sidebar-hover-bg: rgba(255,255,255,0.06); --sidebar-active-bg: rgba(232,121,249,0.22); --sidebar-active-text: #F0A8FA;
+}
+:root[data-theme="highContrast"] {
+  --bg-page: #000000; --bg-card: #111111; --bg-hover: #1E1E1E; --bg-subtle: #0A0A0A;
+  --border: #333333; --border-strong: #555555;
+  --text-primary: #FFFFFF; --text-secondary: #EDEDED; --text-tertiary: #C8C8C8; --text-meta: #9A9A9A;
+  --primary: #FFD000; --primary-hover: #E6BB00;
+  --primary-tint: #332B00; --primary-tint-strong: #4D4100;
+  --bg-sidebar: #000000; --sidebar-text: #C8C8C8; --sidebar-text-hover: #FFFFFF;
+  --sidebar-hover-bg: rgba(255,255,255,0.08); --sidebar-active-bg: rgba(255,208,0,0.25); --sidebar-active-text: #FFD000;
 }
 
 * { box-sizing: border-box; }
@@ -154,15 +271,15 @@ input, textarea { font-family: inherit; }
   height: 40px;
   padding: 0 10px;
   border-radius: 8px;
-  color: #9CA3AF;
+  color: var(--sidebar-text);
   cursor: pointer;
   transition: background .12s, color .12s;
   white-space: nowrap;
 }
-.sidebar-item:hover { background: rgba(255, 255, 255, 0.05); color: #E5E7EB; }
+.sidebar-item:hover { background: var(--sidebar-hover-bg); color: var(--sidebar-text-hover); }
 .sidebar-item.active {
-  background: rgba(99, 102, 241, 0.22);
-  color: #C7D2FE;
+  background: var(--sidebar-active-bg);
+  color: var(--sidebar-active-text);
 }
 .sidebar-item-icon {
   width: 20px;
@@ -189,7 +306,7 @@ input, textarea { font-family: inherit; }
 }
 /* Collapsed: center the icon inside item */
 .sidebar:not(.expanded) .sidebar-item { justify-content: center; padding: 0; }
-.sidebar:not(.expanded) .sidebar-item.active { background: rgba(99, 102, 241, 0.22); }
+.sidebar:not(.expanded) .sidebar-item.active { background: var(--sidebar-active-bg); }
 
 .sidebar-spacer { flex: 1; }
 
@@ -199,7 +316,7 @@ input, textarea { font-family: inherit; }
   gap: 12px;
   background: transparent;
   border: none;
-  color: #6B7280;
+  color: var(--sidebar-text);
   cursor: pointer;
   padding: 0 10px;
   height: 40px;
@@ -208,7 +325,7 @@ input, textarea { font-family: inherit; }
   font-size: 13px;
   font-weight: 500;
 }
-.sidebar-collapse:hover { background: rgba(255, 255, 255, 0.05); color: #D1D5DB; }
+.sidebar-collapse:hover { background: var(--sidebar-hover-bg); color: var(--sidebar-text-hover); }
 .sidebar-collapse.collapsed {
   justify-content: center;
   padding: 0;
@@ -216,7 +333,7 @@ input, textarea { font-family: inherit; }
 .sidebar-collapse .sidebar-item-icon {
   width: 24px; height: 24px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--sidebar-hover-bg);
 }
 .sidebar-collapse .sidebar-item-label {
   opacity: 0;
@@ -286,8 +403,7 @@ input, textarea { font-family: inherit; }
 .page {
   display: grid;
   grid-template-columns: 1fr var(--ai-panel-w);
-  /* min-height: calc(100vh - var(--topbar-h)); */
-  overflow-y: auto;
+  min-width: 0;
 }
 .page.no-ai { grid-template-columns: 1fr; }
 
@@ -296,6 +412,7 @@ input, textarea { font-family: inherit; }
   max-width: 880px;
   margin: 0 auto;
   width: 100%;
+  min-width: 0;
 }
 .page-main.wide { max-width: 1100px; }
 .page-main.compact { padding: 32px 40px 80px; }
@@ -1495,3 +1612,82 @@ input, textarea { font-family: inherit; }
 }
 .cc-input-attach:hover, .cc-input-emoji:hover { background: var(--bg-subtle); color: var(--text-primary); }
 .cc-input-send { padding: 0 18px; height: 36px; }
+
+/* ==================================================================
+   RESPONSIVE
+   ================================================================== */
+
+/* Hamburger that opens the sidebar as a drawer — desktop hides it,
+   the sidebar sits in its own grid track instead. */
+.sidebar-mobile-toggle { display: none; }
+.sidebar-backdrop { display: none; }
+
+/* Below this width the AI panel no longer has room next to real content —
+   drop it to a single column. (Its own mobile treatment is a separate,
+   larger task; hiding it here just prevents it from squeezing page-main
+   into an unreadably narrow strip or forcing horizontal scroll.) */
+@media (max-width: 1100px) {
+  .page { grid-template-columns: 1fr; }
+  .ai-panel { display: none; }
+}
+
+@media (max-width: 860px) {
+  /* Sidebar becomes a slide-in drawer instead of a grid track. */
+  .app, .app.sidebar-expanded { grid-template-columns: 1fr; }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 1000;
+    width: min(280px, 82vw);
+    transform: translateX(-100%);
+    transition: transform .22s cubic-bezier(.4, 0, .2, 1);
+    box-shadow: 0 0 0 transparent;
+  }
+  .sidebar.expanded { width: min(280px, 82vw); }
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 24px 0 48px rgba(0, 0, 0, 0.25);
+  }
+  /* Drawer always shows full labels regardless of the desktop collapse
+     preference — there's no room-pressure reason to icon-collapse it here. */
+  .sidebar .sidebar-item-label,
+  .sidebar .sidebar-collapse .sidebar-item-label {
+    opacity: 1; max-width: 200px; transform: translateX(0); pointer-events: auto;
+  }
+  .sidebar-toggle { display: none; }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(15, 17, 21, 0.45);
+    backdrop-filter: blur(1px);
+  }
+
+  .sidebar-mobile-toggle { display: flex; }
+
+  .topbar { padding: 0 12px; gap: 8px; }
+  .topbar-brand span { display: none; }
+
+  .page-main, .page-main.wide, .page-main.compact {
+    padding: 20px 16px 56px;
+    max-width: 100%;
+  }
+
+  .kpi-grid, .kpi-grid-3, .kpi-grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .chips { grid-template-columns: 1fr; }
+  .kv-grid { grid-template-columns: 1fr; }
+  .settings-split { grid-template-columns: 1fr; }
+
+  /* Data-table-style rows (e.g. Quotes) lay out several fixed-pixel-width
+     columns (set inline by the page, so this can't shrink them) in a single
+     flex line — the reliable narrow-viewport fix is to let them wrap onto
+     additional lines instead of forcing the row past the viewport. */
+  .entity-row { flex-wrap: wrap; row-gap: 6px; }
+}
+
+@media (max-width: 480px) {
+  .kpi-grid, .kpi-grid-3, .kpi-grid-2 { grid-template-columns: 1fr; }
+}

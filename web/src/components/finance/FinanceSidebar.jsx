@@ -26,9 +26,21 @@ const FINANCE_MENU_ITEMS = [
     { path: 'settings', title: 'Settings', icon: LuSettings },
 ]
 
-export default function FinanceSidebar({ expanded, onToggle }) {
+export default function FinanceSidebar({ expanded, onToggle, mobileOpen, onMobileClose }) {
     return (
-        <nav className={`sidebar${expanded ? ' expanded' : ''}`}>
+        <>
+            {/* Sibling of <nav>, not a child — .sidebar has a `transform` on
+                mobile (for the slide-in animation), which would otherwise
+                make this fixed-position backdrop relative to the sidebar's
+                own box instead of the viewport. */}
+            {mobileOpen && (
+                <div
+                    className='sidebar-backdrop'
+                    onClick={onMobileClose}
+                    aria-hidden='true'
+                />
+            )}
+            <nav className={`sidebar${expanded ? ' expanded' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
             <div className='sidebar-logo-row'>
                 <div className='sidebar-logo'>
                     <LuZap size={18} />
@@ -41,6 +53,7 @@ export default function FinanceSidebar({ expanded, onToggle }) {
                         key={path}
                         to={path}
                         title={expanded ? undefined : title}
+                        onClick={onMobileClose}
                         className={({ isActive }) => `sidebar-item${isActive ? ' active' : ''}`}
                     >
                         <span className='sidebar-item-icon'><Icon size={18} /></span>
@@ -62,6 +75,7 @@ export default function FinanceSidebar({ expanded, onToggle }) {
                 </span>
                 <span className='sidebar-item-label'>Collapse</span>
             </button>
-        </nav>
+            </nav>
+        </>
     )
 }

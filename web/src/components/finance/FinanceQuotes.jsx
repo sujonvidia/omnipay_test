@@ -102,12 +102,12 @@ const styles = {
     rowMain: { flex: '1 1 0%', minWidth: '0px' },
     meta12: { fontSize: '12px' },
     rowSub: { fontSize: '13px', marginTop: '2px' },
-    statusCol: { width: '130px' },
-    amountCol: { width: '120px', textAlign: 'right' },
+    statusCol: { width: '130px', flexShrink: 0 },
+    amountCol: { width: '120px', textAlign: 'right', flexShrink: 0 },
     bold: { fontWeight: 600 },
-    activityCol: { width: '160px', fontSize: '13px' },
+    activityCol: { width: '160px', fontSize: '13px', flexShrink: 0 },
     noteText: { fontSize: '12.5px' },
-    actionCol: { width: '90px', textAlign: 'right' },
+    actionCol: { width: '90px', textAlign: 'right', flexShrink: 0 },
     viewLink: { color: 'var(--primary)', fontSize: '13px', cursor: 'pointer' },
 }
 
@@ -198,12 +198,12 @@ export default function FinanceQuotes() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3 mt-4 mb-4">
-                    <div className="cmd-input" style={styles.searchInputWrap}>
+                <div className="flex flex-wrap items-center gap-3 mt-4 mb-4">
+                    <div className="cmd-input" style={{ ...styles.searchInputWrap, minWidth: 160 }}>
                         <SparkleIcon size={12} fill="var(--text-meta)" />
                         <input placeholder="Search quotes..." defaultValue="" style={styles.searchInput} />
                     </div>
-                    <div className="flex gap-1" style={styles.filterGroup}>
+                    <div className="flex flex-wrap gap-1" style={styles.filterGroup}>
                         {FILTERS.map((filter, i) => (
                             <div key={filter} style={i === 0 ? styles.filterActive : styles.filterIdle}>
                                 {filter}
@@ -320,14 +320,14 @@ export default function FinanceQuotes() {
                                 <FileIcon />
                             </div>
                             <div style={styles.rowMain}>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 whitespace-nowrap">
                                     <div style={styles.bold}>{q.quote_number}</div>
                                     <span className="text-meta" style={styles.meta12}>
                                         {q.createdAt ? new Date(q.createdAt).toLocaleDateString() : '—'}
                                     </span>
                                 </div>
-                                <div className="flex items-center gap-2" style={styles.rowSub}>
-                                    <span>{q.customer_name}</span>
+                                <div className="flex items-center gap-2 truncate" style={styles.rowSub}>
+                                    <span className="truncate">{q.customer_name}</span>
                                 </div>
                             </div>
                             <div style={styles.statusCol}>

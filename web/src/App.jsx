@@ -14,6 +14,7 @@ import FinanceCollections from './components/finance/FinanceCollections';
 import FinanceQuotes from './components/finance/FinanceQuotes';
 import FinanceReceivables from './components/finance/FinanceReceivables';
 import FinanceSettings from './components/finance/FinanceSettings';
+import FinanceProfile from './components/finance/FinanceProfile';
 
 export default function App() {
     return (
@@ -40,6 +41,7 @@ export default function App() {
                     <Route path="quotes" element={<FinanceQuotes />} />
                     <Route path="receivables" element={<FinanceReceivables />} />
                     <Route path="settings" element={<FinanceSettings />} />
+                    <Route path="profile" element={<FinanceProfile />} />
                     <Route index element={<Navigate to="home" replace />} />
                 </Route>
 

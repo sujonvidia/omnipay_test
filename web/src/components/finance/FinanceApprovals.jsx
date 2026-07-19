@@ -110,14 +110,14 @@ export default function FinanceApprovals() {
                                     {(a.customer_name || a.quote_number || 'A').charAt(0).toUpperCase()}
                                 </div>
                                 <div className="row-body">
-                                    <div className="flex items-center gap-2">
-                                        <span style={{ fontWeight: 600 }}>{a.quote_number || '—'}</span>
-                                        {a.customer_name && <><span className="text-tertiary">·</span><span>{a.customer_name}</span></>}
-                                        <span className="text-tertiary">·</span>
-                                        <span style={{ fontWeight: 600 }}>${(a.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                                        <span className={`badge ${PRIORITY_COLOR[a.priority] || 'gray'}`}>{a.priority || 'standard'}</span>
+                                    <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="shrink-0" style={{ fontWeight: 600 }}>{a.quote_number || '—'}</span>
+                                        {a.customer_name && <><span className="text-tertiary shrink-0">·</span><span className="truncate min-w-0">{a.customer_name}</span></>}
+                                        <span className="text-tertiary shrink-0">·</span>
+                                        <span className="shrink-0" style={{ fontWeight: 600 }}>${(a.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                        <span className={`badge shrink-0 ${PRIORITY_COLOR[a.priority] || 'gray'}`}>{a.priority || 'standard'}</span>
                                     </div>
-                                    <div className="row-sub">
+                                    <div className="row-sub whitespace-nowrap">
                                         Requested by {a.requested_by || '—'} ·{' '}
                                         {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : '—'}
                                     </div>
@@ -155,14 +155,14 @@ export default function FinanceApprovals() {
                             {(a.customer_name || a.quote_number || 'A').charAt(0).toUpperCase()}
                         </div>
                         <div className="row-body">
-                            <div className="flex items-center gap-2">
-                                <span style={{ fontWeight: 600 }}>{a.quote_number || '—'}</span>
-                                {a.customer_name && <><span className="text-tertiary">·</span><span>{a.customer_name}</span></>}
-                                <span className="text-tertiary">·</span>
-                                <span style={{ fontWeight: 600 }}>${(a.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                                <span className={`badge ${PRIORITY_COLOR[a.priority] || 'gray'}`}>{a.priority || 'standard'}</span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="shrink-0" style={{ fontWeight: 600 }}>{a.quote_number || '—'}</span>
+                                {a.customer_name && <><span className="text-tertiary shrink-0">·</span><span className="truncate min-w-0">{a.customer_name}</span></>}
+                                <span className="text-tertiary shrink-0">·</span>
+                                <span className="shrink-0" style={{ fontWeight: 600 }}>${(a.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                                <span className={`badge shrink-0 ${PRIORITY_COLOR[a.priority] || 'gray'}`}>{a.priority || 'standard'}</span>
                             </div>
-                            <div className="row-sub">
+                            <div className="row-sub whitespace-nowrap">
                                 {a.requested_by || '—'} · {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : '—'}
                             </div>
                         </div>

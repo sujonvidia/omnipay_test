@@ -58,6 +58,14 @@ export const MUTATIONS = {
     logout: `
         mutation logout { logout { status message } }
     `,
+    updateUser: `
+        mutation update_user($input: UpdateUserInput!) {
+            update_user(input: $input) {
+                status message
+                data { id email firstname lastname company_id role }
+            }
+        }
+    `,
 };
 
 export const QUERIES = {
