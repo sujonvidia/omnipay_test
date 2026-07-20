@@ -241,7 +241,7 @@ export default function FinanceAccounts() {
                 <div className="hero">
                     <div className="hero-icon"><SparkleIcon size={22} /></div>
                     <h1 className="hero-title">Accounts</h1>
-                    <p className="hero-sub">Customer portfolio</p>
+                    <p className="hero-sub">Your customer portfolio and account intelligence</p>
                 </div>
 
                 <div className="aibar">
@@ -277,6 +277,13 @@ export default function FinanceAccounts() {
                         ))}
                     </div>
                 </div>
+
+                {!loading && high_risk.length > 0 && (
+                    <div className="ai-update-banner">
+                        <span className="dot" />
+                        <div>{high_risk.length} account{high_risk.length === 1 ? '' : 's'} need attention based on recent activity.</div>
+                    </div>
+                )}
 
                 <div style={{ margin: '12px 0', display: 'flex', gap: 8 }}>
                     <button

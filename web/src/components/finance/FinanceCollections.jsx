@@ -3,6 +3,20 @@ import { useState, useEffect } from 'react';
 const BASE = import.meta.env.VITE_BASE_URL || '';
 const authH = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
 
+const SparkleIcon = ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4L12 3z" fill="var(--primary)" />
+        <path d="M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14z" fill="var(--primary)" />
+    </svg>
+);
+
+const COLLECTIONS_CHIPS = [
+    { title: "Who's most at risk?", cat: 'Priority' },
+    { title: 'Draft a reminder for a customer', cat: 'Message' },
+    { title: 'Show payment history', cat: 'History' },
+    { title: 'Schedule follow-up cadence', cat: 'Automation' },
+];
+
 function useTransactions() {
     const [txns, setTxns] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -190,6 +204,18 @@ export default function FinanceCollections() {
                             </button>
                         </div>
                     </form>
+
+                    <div className="chips">
+                        {COLLECTIONS_CHIPS.map((chip) => (
+                            <div className="chip" key={chip.title}>
+                                <span className="chip-icon"><SparkleIcon size={16} /></span>
+                                <div className="chip-body">
+                                    <div className="chip-title">{chip.title}</div>
+                                    <div className="chip-cat">{chip.cat}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 {/* KPIs from real data */}

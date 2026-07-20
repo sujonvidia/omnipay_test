@@ -24,8 +24,31 @@ const SparkleIcon = ({ size = 22 }) => (
     </svg>
 );
 
-const PRIORITY_COLOR = { urgent: 'red', high: 'amber', standard: 'green' };
 const STATUS_COLOR = { pending: 'amber', approved: 'green', rejected: 'red' };
+
+function ApprovalRow({ a, statusBadge = true }) {
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString() : '—';
+    return (
+        <div className="entity-row" key={a._id}>
+            <div className="avatar" style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)' }}>
+                {(a.customer_name || a.quote_number || 'A').charAt(0).toUpperCase()}
+            </div>
+            <div className="row-body">
+                <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="shrink-0" style={{ fontWeight: 600 }}>{a.quote_number || '—'}</span>
+                    {a.customer_name && <><span className="text-tertiary shrink-0">·</span><span className="truncate min-w-0">{a.customer_name}</span></>}
+                    <span className="text-tertiary shrink-0">·</span>
+                    <span className="shrink-0" style={{ fontWeight: 600 }}>${(a.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                    {a.priority === 'urgent' && <span className="badge shrink-0 red">High</span>}
+                </div>
+                <div className="row-meta whitespace-nowrap">
+                    Submitted {fmtDate(a.submitted_at)}{a.requested_by ? ` by ${a.requested_by}` : ''}
+                </div>
+            </div>
+            {statusBadge && <span className={`badge ${STATUS_COLOR[a.status] || 'gray'}`}>{a.status || '—'}</span>}
+        </div>
+    );
+}
 
 export default function FinanceApprovals() {
     const { approvals, loading, error } = useApprovals();
@@ -34,6 +57,21 @@ export default function FinanceApprovals() {
     const approved = approvals.filter(a => a.status === 'approved');
     const rejected = approvals.filter(a => a.status === 'rejected');
     const totalPending = pending.reduce((s, a) => s + (a.amount || 0), 0);
+    const highPriority = pending.filter(a => a.priority === 'urgent' || a.priority === 'high');
+
+    // Design's "High Priority / Recently Submitted / Standard" grouping,
+    // mapped onto our real priority field (urgent/high/standard).
+    const urgentPending = pending.filter(a => a.priority === 'urgent');
+    const highPending = pending.filter(a => a.priority === 'high');
+    const standardPending = pending.filter(a => !a.priority || a.priority === 'standard');
+    const fmtAmt = (n) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+
+    const CHIPS = [
+        { title: 'What needs urgent approval?', cat: 'Approvals' },
+        { title: 'Which approvals carry the most risk?', cat: 'Value' },
+        { title: 'What can I approve quickly?', cat: 'Summary' },
+        { title: 'Which approvals are high risk?', cat: 'Risk' },
+    ];
 
     return (
         <>
@@ -69,7 +107,26 @@ export default function FinanceApprovals() {
                             </button>
                         </div>
                     </form>
+
+                    <div className="chips">
+                        {CHIPS.map((chip) => (
+                            <div className="chip" key={chip.title}>
+                                <span className="chip-icon"><SparkleIcon size={16} /></span>
+                                <div className="chip-body">
+                                    <div className="chip-title">{chip.title}</div>
+                                    <div className="chip-cat">{chip.cat}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
+
+                {!loading && pending.length > 0 && (
+                    <div className="ai-update-banner">
+                        <span className="dot" />
+                        <div>{pending.length} pending · {highPriority.length} high-risk · ${totalPending.toLocaleString('en-US', { minimumFractionDigits: 0 })} total awaiting approval.</div>
+                    </div>
+                )}
 
                 {/* KPIs from real data */}
                 {!loading && approvals.length > 0 && (
@@ -96,48 +153,6 @@ export default function FinanceApprovals() {
                     </div>
                 )}
 
-                {/* Pending first */}
-                {pending.length > 0 && (
-                    <>
-                        <div className="section-header amber" style={{ marginTop: 20 }}>
-                            <span className="dot" />
-                            <span className="section-title">Pending Approval</span>
-                            <span className="section-count">{pending.length}</span>
-                        </div>
-                        {pending.map(a => (
-                            <div className="entity-row" key={a._id}>
-                                <div className="avatar" style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)' }}>
-                                    {(a.customer_name || a.quote_number || 'A').charAt(0).toUpperCase()}
-                                </div>
-                                <div className="row-body">
-                                    <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="shrink-0" style={{ fontWeight: 600 }}>{a.quote_number || '—'}</span>
-                                        {a.customer_name && <><span className="text-tertiary shrink-0">·</span><span className="truncate min-w-0">{a.customer_name}</span></>}
-                                        <span className="text-tertiary shrink-0">·</span>
-                                        <span className="shrink-0" style={{ fontWeight: 600 }}>${(a.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                                        <span className={`badge shrink-0 ${PRIORITY_COLOR[a.priority] || 'gray'}`}>{a.priority || 'standard'}</span>
-                                    </div>
-                                    <div className="row-sub whitespace-nowrap">
-                                        Requested by {a.requested_by || '—'} ·{' '}
-                                        {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : '—'}
-                                    </div>
-                                </div>
-                                <span className="badge amber">pending</span>
-                            </div>
-                        ))}
-                    </>
-                )}
-
-                {/* All approvals */}
-                <div className="section-header violet" style={{ marginTop: 20 }}>
-                    <span className="dot" />
-                    <span className="section-title">All Approvals</span>
-                    {!loading && <span className="section-count">{approvals.length}</span>}
-                    <span className="section-meta" style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-tertiary)' }}>
-                        MongoDB · /finance/approvals
-                    </span>
-                </div>
-
                 {loading && (
                     <div style={{ padding: '14px 18px', fontSize: 13, color: 'var(--text-tertiary)' }}>Loading approvals…</div>
                 )}
@@ -149,35 +164,110 @@ export default function FinanceApprovals() {
                         No approval requests. Approvals are created when quotes are submitted for review.
                     </div>
                 )}
-                {approvals.map(a => (
-                    <div className="entity-row" key={a._id}>
-                        <div className="avatar" style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)' }}>
-                            {(a.customer_name || a.quote_number || 'A').charAt(0).toUpperCase()}
+
+                {/* Design's High Priority / Recently Submitted / Standard grouping,
+                    mapped onto our real `priority` field. */}
+                {urgentPending.length > 0 && (
+                    <>
+                        <div id="pending-approvals" className="section-header red" style={{ marginTop: 20 }}>
+                            <span className="dot" />
+                            <span className="section-title">High Priority</span>
+                            <span className="section-count">{urgentPending.length}</span>
                         </div>
-                        <div className="row-body">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="shrink-0" style={{ fontWeight: 600 }}>{a.quote_number || '—'}</span>
-                                {a.customer_name && <><span className="text-tertiary shrink-0">·</span><span className="truncate min-w-0">{a.customer_name}</span></>}
-                                <span className="text-tertiary shrink-0">·</span>
-                                <span className="shrink-0" style={{ fontWeight: 600 }}>${(a.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
-                                <span className={`badge shrink-0 ${PRIORITY_COLOR[a.priority] || 'gray'}`}>{a.priority || 'standard'}</span>
-                            </div>
-                            <div className="row-sub whitespace-nowrap">
-                                {a.requested_by || '—'} · {a.submitted_at ? new Date(a.submitted_at).toLocaleDateString() : '—'}
-                            </div>
+                        {urgentPending.map(a => <ApprovalRow key={a._id} a={a} />)}
+                    </>
+                )}
+
+                {highPending.length > 0 && (
+                    <>
+                        <div className="section-header violet" style={{ marginTop: 20 }}>
+                            <span className="dot" />
+                            <span className="section-title">Recently Submitted</span>
+                            <span className="section-count">{highPending.length}</span>
                         </div>
-                        <span className={`badge ${STATUS_COLOR[a.status] || 'gray'}`}>{a.status || '—'}</span>
-                    </div>
-                ))}
+                        {highPending.map(a => <ApprovalRow key={a._id} a={a} />)}
+                    </>
+                )}
+
+                {standardPending.length > 0 && (
+                    <>
+                        <div className="section-header green" style={{ marginTop: 20 }}>
+                            <span className="dot" />
+                            <span className="section-title">Standard</span>
+                            <span className="section-count">{standardPending.length}</span>
+                        </div>
+                        {standardPending.map(a => <ApprovalRow key={a._id} a={a} />)}
+                    </>
+                )}
+
+                {/* All approvals — includes approved/rejected history, beyond what the design covers */}
+                <div className="section-header blue" style={{ marginTop: 20 }}>
+                    <span className="dot" />
+                    <span className="section-title">All Approvals</span>
+                    {!loading && <span className="section-count">{approvals.length}</span>}
+                    <span className="section-meta" style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-tertiary)' }}>
+                        MongoDB · /finance/approvals
+                    </span>
+                </div>
+                {approvals.map(a => <ApprovalRow key={a._id} a={a} />)}
             </main>
 
             <aside className="ai-panel">
                 <div className="ai-panel-header">
                     <div className="ai-panel-title">
                         <SparkleIcon size={16} />
-                        <span>Approval Summary</span>
+                        <span>What Needs Attention</span>
                     </div>
                     <span className="ai-live">Live</span>
+                </div>
+
+                {urgentPending.length > 0 && (
+                    <>
+                        <div className="ai-section-label" style={{ marginTop: 0 }}>Priority Approvals</div>
+                        {urgentPending.slice(0, 3).map((a, i) => (
+                            <div key={a._id} style={{ background: i % 2 === 0 ? 'var(--red-bg)' : 'var(--amber-bg)', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="avatar" style={{ width: 28, height: 28, fontSize: 12, background: 'var(--bg-card)', color: 'var(--text-secondary)' }}>
+                                        {(a.customer_name || a.quote_number || 'A').charAt(0).toUpperCase()}
+                                    </div>
+                                    <div style={{ fontWeight: 600, fontSize: 14 }}>{a.customer_name || a.quote_number}</div>
+                                    <span style={{ flex: 1 }} />
+                                    <span className="badge red">High</span>
+                                </div>
+                                <div className="text-tertiary" style={{ fontSize: 12.5, marginBottom: 10 }}>{a.quote_number || '—'} · {fmtAmt(a.amount)}</div>
+                                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>
+                                    {i === 0 ? 'High-risk approval needed' : 'Awaiting sign-off'}
+                                </div>
+                                <a href="#pending-approvals" className="btn btn-secondary btn-sm" style={{ background: 'var(--bg-card)', width: '100%', textAlign: 'center', display: 'block' }}>Review</a>
+                            </div>
+                        ))}
+                    </>
+                )}
+
+                <div className="ai-section-label">Quick Signals</div>
+                <div className="ai-list">
+                    <div className="ai-list-item"><div className="dot" style={{ background: 'var(--text-meta)' }} /><div>{loading ? '…' : pending.length} approval{pending.length === 1 ? '' : 's'} pending</div></div>
+                    <div className="ai-list-item"><div className="dot" style={{ background: 'var(--text-meta)' }} /><div>{loading ? '…' : urgentPending.length} high-risk</div></div>
+                    <div className="ai-list-item"><div className="dot" style={{ background: 'var(--text-meta)' }} /><div>{loading ? '…' : fmtAmt(totalPending)} total awaiting approval</div></div>
+                </div>
+
+                {pending.length > 0 && (
+                    <>
+                        <div className="ai-section-label">Suggested Action</div>
+                        <a href="#pending-approvals" className="btn btn-primary btn-block" style={{ display: 'block', textAlign: 'center' }}>
+                            Review top approvals →
+                        </a>
+                    </>
+                )}
+
+                <div className="ai-section-label">Also Noted</div>
+                <div className="ai-list">
+                    <div className="ai-list-item amber"><div className="dot" />
+                        <div><div className="ai-list-item-title">Average approval time rising</div></div></div>
+                    <div className="ai-list-item green"><div className="dot" />
+                        <div><div className="ai-list-item-title">High-value customers waiting</div></div></div>
+                    <div className="ai-list-item red"><div className="dot" />
+                        <div><div className="ai-list-item-title">Pipeline at risk if delayed</div></div></div>
                 </div>
 
                 <div className="ai-section-label">Snapshot</div>
@@ -191,7 +281,7 @@ export default function FinanceApprovals() {
                     </div>
                     <div className="ai-snapshot-row">
                         <span className="label">Value pending</span>
-                        <span className="val">{loading ? '…' : `$${totalPending.toLocaleString('en-US', { minimumFractionDigits: 2 })}`}</span>
+                        <span className="val">{loading ? '…' : fmtAmt(totalPending)}</span>
                     </div>
                     <div className="ai-snapshot-row">
                         <span className="label">Approved</span>

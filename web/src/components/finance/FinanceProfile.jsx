@@ -41,7 +41,7 @@ export default function FinanceProfile() {
     };
 
     return (
-        <main className='page-main compact'>
+        <main className='page-main'>
             <div className='page-head flex items-center gap-3'>
                 <button
                     type='button'

@@ -178,6 +178,7 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+html { overflow-y: scroll; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
@@ -409,13 +410,13 @@ input, textarea { font-family: inherit; }
 
 .page-main {
   padding: 40px 56px 80px;
-  max-width: 880px;
+  max-width: 1100px;
   margin: 0 auto;
   width: 100%;
   min-width: 0;
 }
 .page-main.wide { max-width: 1100px; }
-.page-main.compact { padding: 32px 40px 80px; }
+.page-main.compact { padding: 40px 56px 80px; }
 
 .ai-panel {
   background: var(--bg-card);

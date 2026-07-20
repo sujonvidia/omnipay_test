@@ -108,9 +108,9 @@ export default function FinanceHome() {
                         <div className="chips">
                             {[
                                 { title: 'What needs my attention today?', cat: 'Priority' },
-                                { title: 'Show pending approvals', cat: 'Approvals' },
-                                { title: 'Show transactions today', cat: 'Payments' },
-                                { title: 'Summarize gateway status', cat: 'Settings' },
+                                { title: 'Show overdue invoices', cat: 'Receivables' },
+                                { title: 'Show urgent approvals', cat: 'Approvals' },
+                                { title: "Summarize today's risk", cat: 'AI Summary' },
                             ].map(chip => (
                                 <div className="chip" key={chip.title} onClick={() => setChipConv(true)}>
                                     <span className="chip-icon"><SparkleIcon size={16} /></span>

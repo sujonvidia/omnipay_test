@@ -35,6 +35,20 @@ function useTransactions() {
     return { txns, loading, error, reload: load };
 }
 
+const SparkleIcon = ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4L12 3z" fill="var(--primary)" />
+        <path d="M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14z" fill="var(--primary)" />
+    </svg>
+);
+
+const RECV_CHIPS = [
+    { title: 'What needs my attention?', cat: 'Priority' },
+    { title: 'Which customers are at risk?', cat: 'Risk Analysis' },
+    { title: 'What should I follow up on?', cat: 'Actions' },
+    { title: 'Show overdue invoices', cat: 'Overdue' },
+];
+
 function setlColor(s) {
     if (!s) return 'var(--text-tertiary)';
     s = s.toLowerCase();
@@ -231,6 +245,18 @@ export default function FinanceReceivables() {
                             </button>
                         </div>
                     </form>
+
+                    <div className="chips">
+                        {RECV_CHIPS.map((chip) => (
+                            <div className="chip" key={chip.title}>
+                                <span className="chip-icon"><SparkleIcon size={16} /></span>
+                                <div className="chip-body">
+                                    <div className="chip-title">{chip.title}</div>
+                                    <div className="chip-cat">{chip.cat}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
 
                 {/* KPIs from real data */}

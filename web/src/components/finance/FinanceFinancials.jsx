@@ -173,6 +173,41 @@ function useTxns() {
     return { txns, loading };
 }
 
+function SparkleIcon({ size = 16 }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+            <path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4L12 3z" fill="var(--primary)" />
+            <path d="M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14z" fill="var(--primary)" />
+        </svg>
+    );
+}
+
+const fmt = (n) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
+const daysTill = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
+const isOverdue = (inv) =>
+    inv.due_date && new Date(inv.due_date) < new Date() &&
+    !['paid', 'cancelled', 'void'].includes(inv.status);
+const isOutstanding = (inv) => !['paid', 'cancelled', 'void'].includes(inv.status);
+const openAmount = (inv) => parseFloat(inv.amount_due ?? (parseFloat(inv.total || 0) - parseFloat(inv.amount_paid || 0))) || 0;
+
+// Receivables/AR view — separate from the CardPointe gateway data above,
+// this is invoice + collection data from our own MongoDB.
+function useReceivables() {
+    const [invoices, setInvoices] = useState([]);
+    const [collections, setCollections] = useState([]);
+    const [loading, setLoading] = useState(true);
+    useEffect(() => {
+        Promise.all([
+            fetch(`${BASE}/v1/finance/invoices`, { headers: authH(), credentials: 'include' }).then(r => r.json()).catch(() => null),
+            fetch(`${BASE}/v1/finance/collections`, { headers: authH(), credentials: 'include' }).then(r => r.json()).catch(() => null),
+        ]).then(([inv, col]) => {
+            if (inv?.status) setInvoices(inv.data || []);
+            if (col?.status) setCollections(col.data || []);
+        }).finally(() => setLoading(false));
+    }, []);
+    return { invoices, collections, loading };
+}
+
 function deriveSummary(txnData) {
     const txns = txnData?.txns || [];
     const approved = txns.filter(t => t.respstat === 'A');
@@ -303,6 +338,29 @@ export default function FinanceFinancials() {
     const { data: gateway, loading: gatewayLoading, error: gatewayError } = useGateway();
     const { data: terminals, loading: terminalsLoading, error: terminalsError } = useTerminals();
     const { txns: importedTxns, loading: importedLoading } = useTxns();
+    const { invoices, collections, loading: receivablesLoading } = useReceivables();
+
+    const outstandingInvoices = invoices.filter(isOutstanding);
+    const outstandingAmt = outstandingInvoices.reduce((s, i) => s + openAmount(i), 0);
+
+    const overdueInvoices = outstandingInvoices.filter(isOverdue);
+    const overdueAmt = overdueInvoices.reduce((s, i) => s + openAmount(i), 0);
+
+    const now = new Date();
+    const collectedThisMonth = invoices
+        .filter(i => i.paid_date && new Date(i.paid_date).getMonth() === now.getMonth() && new Date(i.paid_date).getFullYear() === now.getFullYear())
+        .reduce((s, i) => s + (parseFloat(i.amount_paid) || parseFloat(i.total) || 0), 0);
+
+    const upcomingInvoices = outstandingInvoices.filter(i => i.due_date && !isOverdue(i) && daysTill(i.due_date) >= 0 && daysTill(i.due_date) <= 14);
+    const upcomingAmt = upcomingInvoices.reduce((s, i) => s + openAmount(i), 0);
+
+    const upcoming7 = upcomingInvoices.filter(i => daysTill(i.due_date) <= 7);
+    const earlyDelay = overdueInvoices.filter(i => Math.abs(daysTill(i.due_date)) <= 10);
+    const highValueOutstanding = outstandingInvoices.filter(i => parseFloat(i.total || 0) > 5000);
+    const recentCollectionCustIds = new Set(
+        collections.filter(c => (new Date() - new Date(c.created_at || c.date)) / 86400000 < 7).map(c => c.customer_id)
+    );
+    const silentCustomers = [...new Set(overdueInvoices.map(i => i.customer_id))].filter(id => !recentCollectionCustIds.has(id));
 
     const importedApproved = importedTxns.filter(t => t.respstat === 'A');
     const importedDeclined = importedTxns.filter(t => t.respstat === 'C');
@@ -350,7 +408,155 @@ export default function FinanceFinancials() {
                             </button>
                         </div>
                     </form>
+
+                    <div className="chips">
+                        {[
+                            { title: "What's outstanding?", cat: 'Receivables' },
+                            { title: 'How is cash flow trending?', cat: 'Cash flow' },
+                            { title: 'What needs attention?', cat: 'Risk' },
+                            { title: 'Show overdue drivers', cat: 'Overdue' },
+                        ].map(chip => (
+                            <div className="chip" key={chip.title}>
+                                <span className="chip-icon"><SparkleIcon size={16} /></span>
+                                <div className="chip-body">
+                                    <div className="chip-title">{chip.title}</div>
+                                    <div className="chip-cat">{chip.cat}</div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
+
+                {/* ── Receivables Overview (MongoDB invoices/collections) ── */}
+                {!receivablesLoading && overdueAmt > 0 && (
+                    <div className="ai-update-banner">
+                        <span className="dot" />
+                        <div>Overdue amount at {fmt(overdueAmt)} across {overdueInvoices.length} invoice{overdueInvoices.length === 1 ? '' : 's'} — a small group of accounts is driving most of the risk.</div>
+                    </div>
+                )}
+
+                <div className="kpi-grid mt-2">
+                    <div className="kpi">
+                        <div className="kpi-label">Total Outstanding</div>
+                        <div className="kpi-value">{receivablesLoading ? '…' : fmt(outstandingAmt)}</div>
+                        <div className="kpi-trend gray">{outstandingInvoices.length} open invoice{outstandingInvoices.length === 1 ? '' : 's'}</div>
+                    </div>
+                    <div className="kpi">
+                        <div className="kpi-label">Collected this Month</div>
+                        <div className="kpi-value">{receivablesLoading ? '…' : fmt(collectedThisMonth)}</div>
+                        <div className="kpi-trend green">This calendar month</div>
+                    </div>
+                    <div className="kpi">
+                        <div className="kpi-label">Overdue Amount</div>
+                        <div className="kpi-value">{receivablesLoading ? '…' : fmt(overdueAmt)}</div>
+                        <div className={`kpi-trend ${overdueAmt > 0 ? 'red' : 'gray'}`}>
+                            {overdueInvoices.length} overdue invoice{overdueInvoices.length === 1 ? '' : 's'}
+                        </div>
+                    </div>
+                    <div className="kpi">
+                        <div className="kpi-label">Upcoming Receivables</div>
+                        <div className="kpi-value">{receivablesLoading ? '…' : fmt(upcomingAmt)}</div>
+                        <div className="kpi-trend amber">Due within 14 days</div>
+                    </div>
+                </div>
+
+                {!receivablesLoading && (
+                    <>
+                        <div className="section-header violet" style={{ marginTop: 24 }}>
+                            <span className="dot" />
+                            <span className="section-title">Key Financial Signals</span>
+                            <span className="section-count">
+                                {[overdueInvoices.length > 0, silentCustomers.length > 0, collections.length > 0, highValueOutstanding.length > 0, upcomingInvoices.length > 0].filter(Boolean).length}
+                            </span>
+                        </div>
+                        <div className="ai-list">
+                            {overdueInvoices.length > 0 && (
+                                <div className="ai-list-item red"><div className="dot" /><div>
+                                    <div className="ai-list-item-title">Overdue invoices are increasing across key accounts</div>
+                                    <div className="ai-list-item-sub">{overdueInvoices.length} invoice{overdueInvoices.length === 1 ? '' : 's'} · {fmt(overdueAmt)}</div>
+                                </div></div>
+                            )}
+                            {silentCustomers.length > 0 && (
+                                <div className="ai-list-item amber"><div className="dot" /><div>
+                                    <div className="ai-list-item-title">Payments are slowing across key accounts</div>
+                                    <div className="ai-list-item-sub">{silentCustomers.length} customer{silentCustomers.length === 1 ? '' : 's'} with no recent collection activity</div>
+                                </div></div>
+                            )}
+                            {collections.length > 0 && (
+                                <div className="ai-list-item green"><div className="dot" /><div>
+                                    <div className="ai-list-item-title">Collections improved this week</div>
+                                    <div className="ai-list-item-sub">{collections.filter(c => (new Date() - new Date(c.created_at || c.date)) / 86400000 < 7).length} contact{collections.filter(c => (new Date() - new Date(c.created_at || c.date)) / 86400000 < 7).length === 1 ? '' : 's'} logged in the last 7 days</div>
+                                </div></div>
+                            )}
+                            {highValueOutstanding.length > 0 && (
+                                <div className="ai-list-item red"><div className="dot" /><div>
+                                    <div className="ai-list-item-title">High-value invoices remain unpaid</div>
+                                    <div className="ai-list-item-sub">{highValueOutstanding.length} invoice{highValueOutstanding.length === 1 ? '' : 's'} above $5,000</div>
+                                </div></div>
+                            )}
+                            {upcomingInvoices.length > 0 && (
+                                <div className="ai-list-item violet"><div className="dot" /><div>
+                                    <div className="ai-list-item-title">Upcoming receivables are concentrated in a few customers</div>
+                                    <div className="ai-list-item-sub">{fmt(upcomingAmt)} due across {upcomingInvoices.length} invoice{upcomingInvoices.length === 1 ? '' : 's'}</div>
+                                </div></div>
+                            )}
+                            {overdueInvoices.length === 0 && silentCustomers.length === 0 && collections.length === 0 && highValueOutstanding.length === 0 && upcomingInvoices.length === 0 && (
+                                <div className="ai-list-item"><div className="dot" /><div>
+                                    <div className="ai-list-item-title">No signals yet — create invoices and collections to populate this feed</div>
+                                </div></div>
+                            )}
+                        </div>
+
+                        <div className="section-header blue" style={{ marginTop: 20 }}>
+                            <span className="dot" />
+                            <span className="section-title">Recommended Actions</span>
+                            <span className="section-count">
+                                {[silentCustomers.length > 0, earlyDelay.length > 0, upcoming7.length > 0, highValueOutstanding.length > 0].filter(Boolean).length}
+                            </span>
+                        </div>
+                        <div className="dlist">
+                            {silentCustomers.length > 0 && (
+                                <div className="entity-row flat">
+                                    <div className="row-body">
+                                        <div className="row-title">Follow up on inactive accounts that haven't responded recently</div>
+                                        <div className="row-sub">{silentCustomers.length} customer{silentCustomers.length === 1 ? '' : 's'} overdue with no recent contact</div>
+                                    </div>
+                                    <a href="/connect/finance/collections" style={{ color: 'var(--primary)', fontWeight: 500, fontSize: 13.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>Follow up →</a>
+                                </div>
+                            )}
+                            {earlyDelay.length > 0 && (
+                                <div className="entity-row flat">
+                                    <div className="row-body">
+                                        <div className="row-title">Review customers showing early signs of payment delays</div>
+                                        <div className="row-sub">{earlyDelay.length} invoice{earlyDelay.length === 1 ? '' : 's'} recently past due</div>
+                                    </div>
+                                    <a href="/connect/finance/accounts" style={{ color: 'var(--primary)', fontWeight: 500, fontSize: 13.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>Review accounts →</a>
+                                </div>
+                            )}
+                            {upcoming7.length > 0 && (
+                                <div className="entity-row flat">
+                                    <div className="row-body">
+                                        <div className="row-title">Send reminders to customers with invoices due within 7 days</div>
+                                        <div className="row-sub">{upcoming7.length} invoice{upcoming7.length === 1 ? '' : 's'} · {fmt(upcoming7.reduce((s, i) => s + openAmount(i), 0))}</div>
+                                    </div>
+                                    <a href="/connect/finance/collections" style={{ color: 'var(--primary)', fontWeight: 500, fontSize: 13.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>Send reminders →</a>
+                                </div>
+                            )}
+                            {highValueOutstanding.length > 0 && (
+                                <div className="entity-row flat">
+                                    <div className="row-body">
+                                        <div className="row-title">High-value invoices are ready for collection — act now</div>
+                                        <div className="row-sub">{highValueOutstanding.length} invoice{highValueOutstanding.length === 1 ? '' : 's'} above $5,000</div>
+                                    </div>
+                                    <a href="/connect/finance/receivables" style={{ color: 'var(--primary)', fontWeight: 500, fontSize: 13.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>Convert now →</a>
+                                </div>
+                            )}
+                            {silentCustomers.length === 0 && earlyDelay.length === 0 && upcoming7.length === 0 && highValueOutstanding.length === 0 && (
+                                <div style={{ padding: '12px 4px', fontSize: 13, color: 'var(--text-tertiary)' }}>No actions needed right now.</div>
+                            )}
+                        </div>
+                    </>
+                )}
 
                 {/* ── Gateway & Merchant Account ── */}
                 <div className="section-header blue" style={{ marginTop: 16 }}>
