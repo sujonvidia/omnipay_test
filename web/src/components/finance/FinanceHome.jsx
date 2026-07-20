@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 
 const BASE = import.meta.env.VITE_BASE_URL || '';
 const authH = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
@@ -21,7 +22,15 @@ function SparkleIcon({ size = 16 }) {
     );
 }
 
+function greeting() {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 18) return 'Good afternoon';
+    return 'Good evening';
+}
+
 export default function FinanceHome() {
+    const user = useSelector(s => s.message.user);
     const [tabState, setTabState] = useState(1);
     const [chipConv, setChipConv] = useState(false);
 
@@ -69,15 +78,8 @@ export default function FinanceHome() {
             <main className="page-main">
                 <div className="hero">
                     <div className="hero-icon"><SparkleIcon size={22} /></div>
-                    <h1 className="hero-title">Finance Dashboard</h1>
-                    <p className="hero-sub">
-                        {gateway ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                                <span style={{ width: 7, height: 7, borderRadius: '50%', background: gateway.connected ? 'var(--green)' : 'var(--red)', display: 'inline-block' }} />
-                                CardPointe {gateway.environment} · MID {gateway.merchantId || '—'}
-                            </span>
-                        ) : loading ? 'Loading…' : 'CardPointe not connected'}
-                    </p>
+                    <h1 className="hero-title">{greeting()}, {user?.firstname || 'there'}</h1>
+                    <p className="hero-sub">What can I help you with today?</p>
                 </div>
 
                 <div className="aibar">

@@ -6,16 +6,44 @@ import { FiBell, FiHelpCircle } from 'react-icons/fi'
 import CardProfileModal from './CardProfileModal'
 import SettingsMenu from './SettingsMenu'
 import FinanceSidebar from './FinanceSidebar'
+import ActivityFeedPanel from './ActivityFeedPanel'
+import HelpMenu from './HelpMenu'
+import { useRecentEvents } from '../../hooks/useRecentEvents'
 import './finance.css'
 
 
 const SIDEBAR_EXPANDED_KEY = 'wf_finance_sidebar_expanded_v1'
+const NOTIFICATIONS_SEEN_KEY = 'wf_finance_notifications_seen_at'
 
 export default function FinanceLayout() {
     const user = useSelector(s => s.message.user)
     const [showProfileModal, setShowProfileModal] = useState(false)
     const [showSettingsMenu, setShowSettingsMenu] = useState(false)
+    const [showNotifications, setShowNotifications] = useState(false)
+    const [showRecent, setShowRecent] = useState(false)
+    const [showHelp, setShowHelp] = useState(false)
     const [mobileNavOpen, setMobileNavOpen] = useState(false)
+    const { events: latestEvents } = useRecentEvents(1)
+    const [seenAt, setSeenAt] = useState(() => {
+        try { return localStorage.getItem(NOTIFICATIONS_SEEN_KEY) || '' } catch (_) { return '' }
+    })
+    const hasUnread = latestEvents[0] && new Date(latestEvents[0].at) > new Date(seenAt || 0)
+
+    const openNotifications = () => {
+        setShowRecent(false); setShowHelp(false); setShowSettingsMenu(false)
+        setShowNotifications((v) => !v)
+        const now = latestEvents[0]?.at || new Date().toISOString()
+        try { localStorage.setItem(NOTIFICATIONS_SEEN_KEY, now) } catch (_) { /* private mode */ }
+        setSeenAt(now)
+    }
+    const openRecent = () => {
+        setShowNotifications(false); setShowHelp(false); setShowSettingsMenu(false)
+        setShowRecent((v) => !v)
+    }
+    const openHelp = () => {
+        setShowNotifications(false); setShowRecent(false); setShowSettingsMenu(false)
+        setShowHelp((v) => !v)
+    }
     const [sidebarExpanded, setSidebarExpanded] = useState(() => {
         try { return localStorage.getItem(SIDEBAR_EXPANDED_KEY) !== '0' } catch (_) { return true }
     })
@@ -56,33 +84,62 @@ export default function FinanceLayout() {
                     <span>Northstar Industrial</span>
                 </div>
                 <div className='topbar-spacer flex-1' />
-                <button
-                    type='button'
-                    title='Notifications'
-                    className='topbar-icon relative flex items-center justify-center w-9 h-9 rounded-full hover:bg-black/5'
-                >
-                    <FiBell size={18} />
-                    <span className='dot absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500' />
-                </button>
-                <button
-                    type='button'
-                    title='Recent'
-                    className='topbar-icon flex items-center justify-center w-9 h-9 rounded-full hover:bg-black/5'
-                >
-                    <LuHistory size={18} />
-                </button>
-                <button
-                    type='button'
-                    title='Help'
-                    className='topbar-icon flex items-center justify-center w-9 h-9 rounded-full hover:bg-black/5'
-                >
-                    <FiHelpCircle size={18} />
-                </button>
+                <div className='relative'>
+                    <button
+                        type='button'
+                        title='Notifications'
+                        onClick={openNotifications}
+                        className='topbar-icon relative flex items-center justify-center w-9 h-9 rounded-full hover:bg-black/5'
+                    >
+                        <FiBell size={18} />
+                        {hasUnread && <span className='dot absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500' />}
+                    </button>
+                    {showNotifications && (
+                        <ActivityFeedPanel
+                            title='Notifications'
+                            limit={8}
+                            emptyText='Nothing yet — activity will show up here.'
+                            onClose={() => setShowNotifications(false)}
+                        />
+                    )}
+                </div>
+                <div className='relative'>
+                    <button
+                        type='button'
+                        title='Recent'
+                        onClick={openRecent}
+                        className='topbar-icon flex items-center justify-center w-9 h-9 rounded-full hover:bg-black/5'
+                    >
+                        <LuHistory size={18} />
+                    </button>
+                    {showRecent && (
+                        <ActivityFeedPanel
+                            title='Recent activity'
+                            limit={15}
+                            emptyText='No recent actions yet.'
+                            onClose={() => setShowRecent(false)}
+                        />
+                    )}
+                </div>
+                <div className='relative'>
+                    <button
+                        type='button'
+                        title='Help'
+                        onClick={openHelp}
+                        className='topbar-icon flex items-center justify-center w-9 h-9 rounded-full hover:bg-black/5'
+                    >
+                        <FiHelpCircle size={18} />
+                    </button>
+                    {showHelp && <HelpMenu onClose={() => setShowHelp(false)} />}
+                </div>
                 <div className='relative'>
                     <button
                         type='button'
                         title='Settings'
-                        onClick={() => setShowSettingsMenu((v) => !v)}
+                        onClick={() => {
+                            setShowNotifications(false); setShowRecent(false); setShowHelp(false)
+                            setShowSettingsMenu((v) => !v)
+                        }}
                         className='avatar-chip flex items-center justify-center w-9 h-9 rounded-full bg-[var(--primary)] text-white text-sm font-semibold hover:opacity-85 transition cursor-pointer'
                     >
                         {initials}
