@@ -32,6 +32,24 @@ function useTransactions() {
     return { txns, txnsLoading };
 }
 
+// Invoices + quotes — only fetched here to compute the "Needs Attention"
+// per-customer signals below; each falls back to the design's mock row
+// when no customer in this company qualifies for that signal yet.
+function useAccountSignals() {
+    const [invoices, setInvoices] = useState([]);
+    const [quotes, setQuotes] = useState([]);
+    useEffect(() => {
+        Promise.all([
+            fetch(`${BASE}/v1/finance/invoices`, { headers: authH(), credentials: 'include' }).then(r => r.json()).catch(() => null),
+            fetch(`${BASE}/v1/finance/quotes`, { headers: authH(), credentials: 'include' }).then(r => r.json()).catch(() => null),
+        ]).then(([inv, qs]) => {
+            if (inv?.status) setInvoices(inv.data || []);
+            if (qs?.status) setQuotes(qs.data || []);
+        });
+    }, []);
+    return { invoices, quotes };
+}
+
 const SparkleIcon = ({ size = 22 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4L12 3z" fill="var(--primary)" />
@@ -148,6 +166,7 @@ const labelStyle = { fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 
 export default function FinanceAccounts() {
     const { customers, loading, error, reload } = useCustomers();
     const { txns, txnsLoading } = useTransactions();
+    const { invoices, quotes: acctQuotes } = useAccountSignals();
     const [showForm, setShowForm] = useState(false);
     const [creating, setCreating] = useState(false);
     const [createError, setCreateError] = useState('');
@@ -167,6 +186,85 @@ export default function FinanceAccounts() {
         if ((t.authdate || '') > (cardMap[key].latest || '')) cardMap[key].latest = t.authdate;
     });
     const cards = Object.values(cardMap);
+
+    // ── Needs Attention — real per-customer signals, one per archetype,
+    // falling back to the design's mock row when no customer qualifies. ──
+    const isOverdueInv = (inv) => inv.due_date && new Date(inv.due_date) < new Date() && !['paid', 'cancelled'].includes(inv.status);
+    const daysAgo = (d) => Math.floor((new Date() - new Date(d)) / 86400000);
+    const yearNow = new Date().getFullYear();
+    const invByCustomer = {};
+    invoices.forEach(inv => {
+        const key = String(inv.customer_id);
+        if (!invByCustomer[key]) invByCustomer[key] = [];
+        invByCustomer[key].push(inv);
+    });
+    const quotesPendingByCustomer = {};
+    acctQuotes.filter(q => q.status === 'pending_approval').forEach(q => {
+        const key = String(q.customer_id);
+        quotesPendingByCustomer[key] = (quotesPendingByCustomer[key] || 0) + 1;
+    });
+
+    const custSignals = customers.map(c => {
+        const custInvoices = invByCustomer[String(c._id)] || [];
+        const overdue = custInvoices.filter(isOverdueInv);
+        const ytdTotal = custInvoices
+            .filter(i => new Date(i.issued_date || i.createdAt).getFullYear() === yearNow)
+            .reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
+        const lastActivity = custInvoices
+            .map(i => new Date(i.paid_date || i.issued_date || i.createdAt))
+            .sort((a, b) => b - a)[0];
+        const lastPaid = custInvoices
+            .filter(i => i.paid_date)
+            .map(i => new Date(i.paid_date))
+            .sort((a, b) => b - a)[0];
+        const overdueAmt = overdue.reduce((s, i) => s + openAmountAcct(i), 0);
+        return {
+            customer: c,
+            invoiceCount: custInvoices.length,
+            overdueCount: overdue.length,
+            overdueAmt,
+            ytdTotal,
+            daysSinceActivity: lastActivity ? daysAgo(lastActivity) : null,
+            daysSinceLastPaid: lastPaid ? daysAgo(lastPaid) : null,
+            quotesPending: quotesPendingByCustomer[String(c._id)] || 0,
+        };
+    });
+
+    function openAmountAcct(inv) {
+        return parseFloat(inv.amount_due ?? (parseFloat(inv.total || 0) - parseFloat(inv.amount_paid || 0))) || 0;
+    }
+
+    const riskAvatarColors = ['#1F2937', '#F59E0B', '#EF4444', '#6B7280'];
+    const bestOverdueRisk = custSignals.filter(s => s.overdueCount >= 2).sort((a, b) => b.overdueCount - a.overdueCount)[0];
+    const bestInactive = custSignals.filter(s => s.invoiceCount > 0 && s.daysSinceActivity != null && s.daysSinceActivity >= 14).sort((a, b) => b.daysSinceActivity - a.daysSinceActivity)[0];
+    const bestPaymentRisk = custSignals.filter(s => s.overdueAmt > 0 && s.daysSinceLastPaid != null).sort((a, b) => b.overdueAmt - a.overdueAmt)[0];
+    const bestQuotesPending = custSignals.filter(s => s.quotesPending > 0).sort((a, b) => b.quotesPending - a.quotesPending)[0];
+
+    const needsAttention = [
+        bestOverdueRisk
+            ? { name: bestOverdueRisk.customer.name, sub: `${bestOverdueRisk.invoiceCount} invoice${bestOverdueRisk.invoiceCount === 1 ? '' : 's'} · ${fmtKAcct(bestOverdueRisk.ytdTotal)} YTD · ${bestOverdueRisk.overdueCount} overdue — action needed to reduce risk` }
+            : { name: 'Vertex Systems', sub: '12 invoices · $120K YTD · 2 overdue — action needed to reduce risk' },
+        bestInactive
+            ? { name: bestInactive.customer.name, sub: `No activity in ${bestInactive.daysSinceActivity} days — follow-up recommended` }
+            : { name: 'Meridian Industrial', sub: 'No activity in 14 days — follow-up recommended' },
+        bestPaymentRisk
+            ? { name: bestPaymentRisk.customer.name, sub: `${fmtAcct(bestPaymentRisk.overdueAmt)} overdue · last payment ${bestPaymentRisk.daysSinceLastPaid} days ago — payment at risk` }
+            : { name: 'BluePeak Logistics', sub: '$3,700 overdue · last payment 21 days ago — payment at risk' },
+        bestQuotesPending
+            ? { name: bestQuotesPending.customer.name, sub: `${bestQuotesPending.quotesPending} quote${bestQuotesPending.quotesPending === 1 ? '' : 's'} awaiting approval — action required` }
+            : { name: 'Apex Utilities', sub: '3 quotes awaiting approval — action required' },
+    ];
+
+    function fmtAcct(n) { return `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`; }
+    function fmtKAcct(n) { return n >= 1000 ? `$${(n / 1000).toFixed(0)}K` : fmtAcct(n); }
+
+    // ── AI Insights aside — real single worst-case signals, falling back to
+    // the design's mock content per-item when nothing real qualifies. ──
+    const worstOverdueInvoiceObj = invoices.filter(isOverdueInv).sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0];
+    const avgPayCustomers = customers.filter(c => c.avg_days_to_pay > 0).sort((a, b) => b.avg_days_to_pay - a.avg_days_to_pay);
+    const worstAvgPay = avgPayCustomers[0];
+    const utilCustomers = customers.filter(c => c.credit_limit > 0).map(c => ({ ...c, util: (c.credit_used || 0) / c.credit_limit })).sort((a, b) => b.util - a.util);
+    const worstUtil = utilCustomers[0];
 
     const high_risk = customers.filter(c => c.risk_level === 'high');
     const med_risk  = customers.filter(c => c.risk_level === 'medium');
@@ -277,6 +375,29 @@ export default function FinanceAccounts() {
                         ))}
                     </div>
                 </div>
+
+                {!loading && (
+                    <div>
+                        <div className="section-header red">
+                            <span className="dot" />
+                            <span className="section-title">Needs Attention</span>
+                            <span className="section-count">{needsAttention.length}</span>
+                        </div>
+                        <div>
+                            {needsAttention.map((item, i) => (
+                                <div className="entity-row" key={item.name + i}>
+                                    <div className="avatar" style={{ background: riskAvatarColors[i % riskAvatarColors.length] }}>
+                                        {item.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="row-body">
+                                        <div className="row-title">{item.name}</div>
+                                        <div className="row-sub">{item.sub}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {!loading && high_risk.length > 0 && (
                     <div className="ai-update-banner">
@@ -415,6 +536,72 @@ export default function FinanceAccounts() {
                         <span>AI Insights</span>
                     </div>
                     <span className="ai-live">Live</span>
+                </div>
+
+                <div className="ai-alert red">
+                    <div className="ai-alert-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                    </div>
+                    <div className="ai-alert-body">
+                        <div className="ai-alert-title">Overdue payment risk</div>
+                        <div className="ai-alert-sub">Most urgent action right now</div>
+                        <div className="ai-alert-text">
+                            {worstOverdueInvoiceObj
+                                ? `${worstOverdueInvoiceObj.invoice_number} is ${daysAgo(worstOverdueInvoiceObj.due_date)} days past due — ${fmtAcct(openAmountAcct(worstOverdueInvoiceObj))} outstanding.`
+                                : 'INV-1199 is 14 days past due — $12,450 outstanding. Atypical for this account.'}
+                        </div>
+                        <a className="ai-alert-link" href="/connect/finance/receivables">View overdue invoices →</a>
+                    </div>
+                </div>
+
+                <div className="ai-section-label">Also Noted</div>
+                <div className="ai-list">
+                    <div className="ai-list-item amber">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">{worstAvgPay ? 'Elevated average days to pay' : 'Late payment pattern worsening'}</div>
+                            <div className="ai-list-item-sub">Avg {worstAvgPay ? worstAvgPay.avg_days_to_pay : 22}d</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item green">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">Q2 maintenance renewal likely</div>
+                            <div className="ai-list-item-sub">~$6,500</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item green">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">Upsell: extended warranty</div>
+                            <div className="ai-list-item-sub">~$2,800</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item amber">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">Declining engagement this quarter</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item violet">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">Credit utilization at limit threshold</div>
+                            <div className="ai-list-item-sub">{worstUtil ? `${Math.round(worstUtil.util * 100)}%` : '50%'}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="ai-suggested">
+                    <div className="ai-suggested-title">
+                        <SparkleIcon size={14} />
+                        <span>Q2 renewal opportunity</span>
+                    </div>
+                    <div className="ai-suggested-text">Est. ~$6,500 — ask AI</div>
                 </div>
 
                 <div style={{ fontSize: 12.5, color: 'var(--text-tertiary)', padding: '12px 0' }}>

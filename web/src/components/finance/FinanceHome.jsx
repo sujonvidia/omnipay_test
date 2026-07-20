@@ -14,6 +14,42 @@ function fmt(n) {
     return `$${num.toFixed(2)}`;
 }
 
+const fmtFull = (n) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
+const daysTill = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
+const isOverdue = (inv) =>
+    inv.due_date && new Date(inv.due_date) < new Date() &&
+    !['paid', 'cancelled'].includes(inv.status);
+const isOutstanding = (inv) => !['paid', 'cancelled'].includes(inv.status);
+const openAmount = (inv) => parseFloat(inv.amount_due ?? (parseFloat(inv.total || 0) - parseFloat(inv.amount_paid || 0))) || 0;
+
+function TrendIcon({ size = 12 }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+            <polyline points="17 6 23 6 23 12" />
+        </svg>
+    );
+}
+
+function AlertCircleIcon({ size = 16 }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+    );
+}
+
+function ClockSignalIcon({ size = 16 }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+        </svg>
+    );
+}
+
 function SparkleIcon({ size = 16, fill = 'var(--primary)' }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -159,6 +195,7 @@ export default function FinanceHome() {
     const [quotes, setQuotes] = useState([]);
     const [txns, setTxns] = useState([]);
     const [approvals, setApprovals] = useState([]);
+    const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -175,13 +212,15 @@ export default function FinanceHome() {
             fetch(`${BASE}/v1/finance/quotes`, { headers: authH(), credentials: 'include' }).then(r => r.json()).catch(() => null),
             fetch(`${BASE}/v1/finance/transactions`, { headers: authH(), credentials: 'include' }).then(r => r.json()).catch(() => null),
             fetch(`${BASE}/v1/finance/approvals`, { headers: authH(), credentials: 'include' }).then(r => r.json()).catch(() => null),
-        ]).then(([gw, txnSum, custs, qs, txnList, approvs]) => {
+            fetch(`${BASE}/v1/finance/invoices`, { headers: authH(), credentials: 'include' }).then(r => r.json()).catch(() => null),
+        ]).then(([gw, txnSum, custs, qs, txnList, approvs, invs]) => {
             if (gw?.status) setGateway(gw.data);
             if (txnSum?.status) setTxnSummary(txnSum.data);
             if (custs?.status) setCustomers(custs.data || []);
             if (qs?.status) setQuotes(qs.data || []);
             if (txnList?.status) setTxns(txnList.data || []);
             if (approvs?.status) setApprovals(approvs.data || []);
+            if (invs?.status) setInvoices(invs.data || []);
         }).finally(() => setLoading(false));
     }, []);
 
@@ -191,6 +230,74 @@ export default function FinanceHome() {
     const pendingQuotes = quotes.filter(q => q.status === 'pending_approval' || q.status === 'sent' || q.status === 'draft');
     const txnCount = txnSummary?.txncount || txnSummary?.txnCnt || null;
     const txnTotal = txnSummary?.totalamt || txnSummary?.totalAmt || null;
+
+    // ── Design-parity computations (Summary tab / "What Needs Attention" aside) ──
+    const hasInvoices = invoices.length > 0;
+    const now = new Date();
+    const todayStr = now.toDateString();
+
+    const outstandingInvoices = invoices.filter(isOutstanding);
+    const outstandingAmt = outstandingInvoices.reduce((s, i) => s + openAmount(i), 0);
+    const overdueInvoices = outstandingInvoices.filter(isOverdue);
+    const overdueAmt = overdueInvoices.reduce((s, i) => s + openAmount(i), 0);
+    const overdueCustomerCount = new Set(overdueInvoices.map(i => String(i.customer_id))).size;
+
+    const collectedThisMonth = invoices
+        .filter(i => i.paid_date && new Date(i.paid_date).getMonth() === now.getMonth() && new Date(i.paid_date).getFullYear() === now.getFullYear())
+        .reduce((s, i) => s + (parseFloat(i.amount_paid) || parseFloat(i.total) || 0), 0);
+
+    const pipelineQuotes = quotes.filter(q => ['draft', 'sent', 'pending_approval', 'approved'].includes(q.status));
+    const pipelineTotal = pipelineQuotes.reduce((s, q) => s + (parseFloat(q.total) || 0), 0);
+
+    const totalInvoicedAll = invoices.reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
+    const paidAmtAll = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
+    const overdueAmtAll = invoices.filter(isOverdue).reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
+    const pendingAmtAll = Math.max(totalInvoicedAll - paidAmtAll - overdueAmtAll, 0);
+    const pctOf = (amt) => totalInvoicedAll > 0 ? Math.round((amt / totalInvoicedAll) * 100) : 0;
+    const invoiceStatusPct = hasInvoices
+        ? { paid: pctOf(paidAmtAll), pending: pctOf(pendingAmtAll), overdue: pctOf(overdueAmtAll) }
+        : { paid: 62, pending: 24, overdue: 14 };
+
+    const outstandingByCustomer = {};
+    outstandingInvoices.forEach(i => {
+        const key = String(i.customer_id);
+        if (!outstandingByCustomer[key]) outstandingByCustomer[key] = { name: i.customer_name, amt: 0, overdue: false, minDays: Infinity };
+        outstandingByCustomer[key].amt += openAmount(i);
+        if (isOverdue(i)) outstandingByCustomer[key].overdue = true;
+        const dt = i.due_date ? daysTill(i.due_date) : Infinity;
+        if (dt < outstandingByCustomer[key].minDays) outstandingByCustomer[key].minDays = dt;
+    });
+    const topOutstanding = Object.values(outstandingByCustomer).sort((a, b) => b.amt - a.amt).slice(0, 4);
+
+    const decidedApprovals = approvals.filter(a => a.status === 'approved' && a.decided_at);
+    const avgApprovalDays = decidedApprovals.length
+        ? decidedApprovals.reduce((s, a) => s + ((new Date(a.decided_at) - new Date(a.createdAt || a.submitted_at)) / 86400000), 0) / decidedApprovals.length
+        : null;
+
+    const quotesThisMonth = quotes.filter(q => {
+        const d = new Date(q.created_at || q.createdAt);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const quotesThisMonthTotal = quotesThisMonth.reduce((s, q) => s + (parseFloat(q.total) || 0), 0);
+
+    const collectedAll = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (parseFloat(i.amount_paid) || parseFloat(i.total) || 0), 0);
+    const collectionRate = totalInvoicedAll > 0 ? Math.round((collectedAll / totalInvoicedAll) * 100) : null;
+
+    const invoicesSentToday = invoices.filter(i => i.issued_date && new Date(i.issued_date).toDateString() === todayStr);
+    const invoicesSentTodayAmt = invoicesSentToday.reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
+    const paymentsToday = approvedTxns.filter(t => t.authdate && `${t.authdate.slice(0, 4)}-${t.authdate.slice(4, 6)}-${t.authdate.slice(6, 8)}` === now.toISOString().slice(0, 10));
+    const paymentsTodayAmt = paymentsToday.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+    const quotesToday = quotes.filter(q => new Date(q.created_at || q.createdAt).toDateString() === todayStr);
+    const quotesTodayAmt = quotesToday.reduce((s, q) => s + (parseFloat(q.total) || 0), 0);
+
+    // Action Required — real qualifying items only; fall back to the design's
+    // placeholder set when nothing in any collection qualifies (no data yet).
+    const worstOverdueInvoice = overdueInvoices.slice().sort((a, b) => daysTill(a.due_date) - daysTill(b.due_date))[0];
+    const expiringQuotes = quotes
+        .filter(q => ['sent', 'pending_approval', 'approved'].includes(q.status) && q.valid_until && daysTill(q.valid_until) >= 0 && daysTill(q.valid_until) <= 3)
+        .sort((a, b) => daysTill(a.valid_until) - daysTill(b.valid_until));
+    const dueTomorrowInvoices = outstandingInvoices.filter(i => !isOverdue(i) && i.due_date && daysTill(i.due_date) === 1);
+    const hasRealActionItems = pendingApprovals.length > 0 || !!worstOverdueInvoice || expiringQuotes.length > 0 || dueTomorrowInvoices.length > 0;
 
     return (
         <>
@@ -359,27 +466,137 @@ export default function FinanceHome() {
 
                 {tabState === 1 && (
                     <div className="summary_body">
-                        {/* KPI row — live data */}
+                        {/* KPI row — Pipeline / Outstanding / Collected / Overdue */}
                         <div className="kpi-grid">
                             <div className="kpi">
-                                <div className="kpi-label">Customers</div>
-                                <div className="kpi-value">{loading ? '…' : customers.length || '0'}</div>
-                                <div className="kpi-trend gray">{customers.filter(c => c.risk_level === 'high').length} high-risk</div>
+                                <div className="kpi-label">Pipeline</div>
+                                <div className="kpi-value">{loading ? '…' : fmt(pipelineQuotes.length > 0 ? pipelineTotal : 145000)}</div>
+                                <div className="kpi-trend green"><TrendIcon /> {pipelineQuotes.length > 0 ? `${pipelineQuotes.length} open quote${pipelineQuotes.length === 1 ? '' : 's'}` : '↑ 12% from last week'}</div>
                             </div>
                             <div className="kpi">
-                                <div className="kpi-label">Quotes</div>
-                                <div className="kpi-value">{loading ? '…' : quotes.length || '0'}</div>
-                                <div className="kpi-trend gray">{pendingQuotes.length} active</div>
+                                <div className="kpi-label">Outstanding</div>
+                                <div className="kpi-value">{loading ? '…' : fmtFull(hasInvoices ? outstandingAmt : 84250)}</div>
+                                <div className="kpi-trend red"><TrendIcon /> {hasInvoices ? `${outstandingInvoices.length} open invoice${outstandingInvoices.length === 1 ? '' : 's'}` : 'Rising risk'}</div>
                             </div>
                             <div className="kpi">
-                                <div className="kpi-label">Txns Imported</div>
-                                <div className="kpi-value">{loading ? '…' : txns.length || '0'}</div>
-                                <div className="kpi-trend gray">{fmt(totalCollected)} approved</div>
+                                <div className="kpi-label">Collected MTD</div>
+                                <div className="kpi-value">{loading ? '…' : fmtFull(hasInvoices ? collectedThisMonth : 48700)}</div>
+                                <div className="kpi-trend green"><TrendIcon /> On track</div>
                             </div>
                             <div className="kpi">
-                                <div className="kpi-label">Pending Approvals</div>
-                                <div className="kpi-value">{loading ? '…' : pendingApprovals.length || '0'}</div>
-                                <div className="kpi-trend gray">{fmt(pendingApprovals.reduce((s, a) => s + (a.amount || 0), 0))}</div>
+                                <div className="kpi-label">Overdue</div>
+                                <div className="kpi-value">{loading ? '…' : fmtFull(hasInvoices ? overdueAmt : 18245)}</div>
+                                <div className="kpi-trend red"><TrendIcon /> {hasInvoices ? `${overdueCustomerCount} account${overdueCustomerCount === 1 ? '' : 's'}` : '3 accounts'}</div>
+                            </div>
+                        </div>
+
+                        {/* Receivables trend + invoice status breakdown */}
+                        <div className="mt-4" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                            <div className="card">
+                                <div className="flex justify-between items-center mb-2">
+                                    <div>
+                                        <div style={{ fontWeight: 600, fontSize: 14 }}>Receivables Trend</div>
+                                        <div className="text-meta">7-week rolling view</div>
+                                    </div>
+                                    <span className="badge green">+18%</span>
+                                </div>
+                                <svg viewBox="0 0 320 110" style={{ width: '100%', height: 120 }}>
+                                    <polyline points="8,57.3 58.7,63.5 109.3,52.4 160,59.8 210.7,47.5 261.3,54.9 312,42.5" fill="none" stroke="var(--primary)" strokeWidth="2" />
+                                    <text x="2" y="14" fontSize="10" fill="#9CA3AF">100</text>
+                                    <text x="2" y="56" fontSize="10" fill="#9CA3AF">50</text>
+                                    <text x="2" y="98" fontSize="10" fill="#9CA3AF">0</text>
+                                    {['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7'].map((w, i) => (
+                                        <text key={w} x={8 + i * 50.67} y="108" fontSize="10" fill="#9CA3AF" textAnchor="middle">{w}</text>
+                                    ))}
+                                </svg>
+                            </div>
+                            <div className="card">
+                                <div className="mb-4">
+                                    <div style={{ fontWeight: 600, fontSize: 14 }}>Invoice Status</div>
+                                    <div className="text-meta">Current period breakdown</div>
+                                </div>
+                                {[
+                                    { label: 'Paid', pct: invoiceStatusPct.paid, color: 'var(--green)' },
+                                    { label: 'Pending', pct: invoiceStatusPct.pending, color: 'var(--violet)' },
+                                    { label: 'Overdue', pct: invoiceStatusPct.overdue, color: 'var(--red)' },
+                                ].map(row => (
+                                    <div key={row.label} style={{ marginBottom: 12 }}>
+                                        <div className="flex justify-between" style={{ fontSize: 13, marginBottom: 6 }}>
+                                            <span>{row.label}</span>
+                                            <span>{row.pct}%</span>
+                                        </div>
+                                        <div style={{ height: 6, background: '#F3F4F6', borderRadius: 4, overflow: 'hidden' }}>
+                                            <div style={{ height: '100%', width: `${row.pct}%`, background: row.color }} />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Pipeline movement */}
+                        <div className="card mt-4">
+                            <div className="flex justify-between items-center mb-2">
+                                <div>
+                                    <div style={{ fontWeight: 600, fontSize: 14 }}>Pipeline Movement</div>
+                                    <div className="text-meta">Deal volume over 7 weeks</div>
+                                </div>
+                                <div style={{ color: 'var(--green-text)', fontSize: 13, fontWeight: 500 }}>Steady growth</div>
+                            </div>
+                            <svg viewBox="0 0 760 120" style={{ width: '100%', height: 130 }}>
+                                <polyline points="8,83.6 132,75.2 256,66.8 380,58.4 504,45 628,28.2 752,11.4" fill="none" stroke="var(--green)" strokeWidth="2" />
+                                <text x="2" y="14" fontSize="10" fill="#9CA3AF">160</text>
+                                <text x="2" y="56" fontSize="10" fill="#9CA3AF">135</text>
+                                <text x="2" y="98" fontSize="10" fill="#9CA3AF">115</text>
+                                {['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7'].map((w, i) => (
+                                    <text key={w} x={8 + i * 124} y="118" fontSize="10" fill="#9CA3AF" textAnchor="middle">{w}</text>
+                                ))}
+                            </svg>
+                        </div>
+
+                        {/* Top outstanding accounts */}
+                        <div className="section-header red" style={{ marginTop: 24 }}>
+                            <span className="dot" />
+                            <span className="section-title">Top Outstanding Accounts</span>
+                        </div>
+                        <div className="dlist">
+                            {(topOutstanding.length > 0 ? topOutstanding : [
+                                { name: 'Vertex Systems', amt: 34500, overdue: true, minDays: -5 },
+                                { name: 'Pinnacle Energy', amt: 52900, overdue: false, minDays: 20 },
+                                { name: 'Crestline Manufacturing', amt: 28400, overdue: false, minDays: 20 },
+                                { name: 'Ironwood Construction', amt: 18200, overdue: false, minDays: 5 },
+                            ]).map((acc, i) => {
+                                const initials = (acc.name || '?').charAt(0).toUpperCase();
+                                const badge = acc.overdue ? { text: 'Overdue', cls: 'red' } : (acc.minDays <= 7 ? { text: 'Due soon', cls: 'amber' } : { text: 'Pending', cls: 'violet' });
+                                const avatarColors = ['#1F2937', '#10B981', '#8B5CF6', '#06B6D4'];
+                                return (
+                                    <div key={acc.name + i} className="entity-row flat">
+                                        <div className="avatar" style={{ background: avatarColors[i % avatarColors.length] }}>{initials}</div>
+                                        <div className="row-body">
+                                            <div className="row-title">{acc.name}</div>
+                                        </div>
+                                        <span className={`badge ${badge.cls}`}>{badge.text}</span>
+                                        <div><div className="row-amount">{fmtFull(acc.amt)}</div></div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        {/* Approval time / quotes / collection rate */}
+                        <div className="kpi-grid kpi-grid-3 mt-6">
+                            <div className="kpi">
+                                <div className="kpi-label">Avg Approval Time</div>
+                                <div className="kpi-value">{avgApprovalDays != null ? `${avgApprovalDays.toFixed(1)} days` : '1.8 days'}</div>
+                                <div className="kpi-trend green"><TrendIcon /> ↓ Down from 2.4 days</div>
+                            </div>
+                            <div className="kpi">
+                                <div className="kpi-label">Quotes This Month</div>
+                                <div className="kpi-value">{quotes.length > 0 ? quotesThisMonth.length : 14}</div>
+                                <div className="kpi-trend gray">{quotes.length > 0 ? fmtFull(quotesThisMonthTotal) : '$284K'} total value</div>
+                            </div>
+                            <div className="kpi">
+                                <div className="kpi-label">Collection Rate</div>
+                                <div className="kpi-value">{hasInvoices && collectionRate != null ? `${collectionRate}%` : '78%'}</div>
+                                <div className="kpi-trend green"><TrendIcon /> ↑ Up 6% this week</div>
                             </div>
                         </div>
 
@@ -517,28 +734,104 @@ export default function FinanceHome() {
                 <div className="ai-panel-header">
                     <div className="ai-panel-title">
                         <SparkleIcon size={16} />
-                        <span>Pending Approvals</span>
+                        <span>What Needs Attention</span>
                     </div>
                     <span className="ai-live">Live</span>
                 </div>
 
+                <div className="ai-section-label">Action Required</div>
                 {loading ? (
                     <div style={{ color: 'var(--text-tertiary)', fontSize: 13, padding: '12px 16px' }}>Loading…</div>
-                ) : pendingApprovals.length === 0 ? (
-                    <div style={{ color: 'var(--text-tertiary)', fontSize: 13, padding: '12px 16px' }}>No pending approvals</div>
-                ) : (
+                ) : hasRealActionItems ? (
                     <div className="ai-list">
-                        {pendingApprovals.slice(0, 6).map(a => (
-                            <div key={a._id} className="ai-list-item amber">
+                        {pendingApprovals.length > 0 && (
+                            <div className="ai-list-item red">
                                 <div className="dot" />
                                 <div>
-                                    <div className="ai-list-item-title">{a.title || a.reference || a._id}</div>
-                                    <div className="ai-list-item-sub">{fmt(a.amount)}{a.requested_by ? ` · ${a.requested_by}` : ''}</div>
+                                    <div className="ai-list-item-title">{pendingApprovals.length} pending approval{pendingApprovals.length === 1 ? '' : 's'}</div>
+                                    <div className="ai-list-item-sub">
+                                        {[...new Set(pendingApprovals.map(a => a.customer_name))].slice(0, 2).join(', ')} · {fmt(pendingApprovals.reduce((s, a) => s + (parseFloat(a.amount) || 0), 0))}
+                                    </div>
                                 </div>
                             </div>
-                        ))}
+                        )}
+                        {worstOverdueInvoice && (
+                            <div className="ai-list-item red">
+                                <div className="dot" />
+                                <div>
+                                    <div className="ai-list-item-title">Overdue invoice</div>
+                                    <div className="ai-list-item-sub">{worstOverdueInvoice.customer_name} · {Math.abs(daysTill(worstOverdueInvoice.due_date))} days · {fmt(openAmount(worstOverdueInvoice))}</div>
+                                </div>
+                            </div>
+                        )}
+                        {expiringQuotes.length > 0 && (
+                            <div className="ai-list-item red">
+                                <div className="dot" />
+                                <div>
+                                    <div className="ai-list-item-title">Quote expiring in {daysTill(expiringQuotes[0].valid_until)} day{daysTill(expiringQuotes[0].valid_until) === 1 ? '' : 's'}</div>
+                                    <div className="ai-list-item-sub">{expiringQuotes[0].customer_name} · {fmt(expiringQuotes[0].total)}</div>
+                                </div>
+                            </div>
+                        )}
+                        {dueTomorrowInvoices.length > 0 && (
+                            <div className="ai-list-item amber">
+                                <div className="dot" />
+                                <div>
+                                    <div className="ai-list-item-title">Payment due tomorrow</div>
+                                    <div className="ai-list-item-sub">{dueTomorrowInvoices[0].customer_name} · {fmt(openAmount(dueTomorrowInvoices[0]))}</div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <div className="ai-list">
+                        <div className="ai-list-item red"><div className="dot" /><div>
+                            <div className="ai-list-item-title">2 pending approvals</div>
+                            <div className="ai-list-item-sub">Vertex Systems, Pacific Corp · $70,700</div>
+                        </div></div>
+                        <div className="ai-list-item red"><div className="dot" /><div>
+                            <div className="ai-list-item-title">Overdue invoice</div>
+                            <div className="ai-list-item-sub">Meridian Industrial · 12 days · $34,500</div>
+                        </div></div>
+                        <div className="ai-list-item red"><div className="dot" /><div>
+                            <div className="ai-list-item-title">Quote expiring in 3 days</div>
+                            <div className="ai-list-item-sub">TechCore Industries · $18,200</div>
+                        </div></div>
+                        <div className="ai-list-item amber"><div className="dot" /><div>
+                            <div className="ai-list-item-title">Payment due tomorrow</div>
+                            <div className="ai-list-item-sub">Nova Manufacturing · $12,400</div>
+                        </div></div>
+                        <div className="ai-list-item violet"><div className="dot" /><div>
+                            <div className="ai-list-item-title">Contract renewal</div>
+                            <div className="ai-list-item-sub">Cascade Solutions · Expires Apr 25</div>
+                        </div></div>
                     </div>
                 )}
+
+                <div className="ai-section-label" style={{ marginTop: 16 }}>Quick Signals</div>
+                <div>
+                    <div className="ai-signal-card">
+                        <div className={`ai-signal-icon ${overdueInvoices.length > 0 ? 'red' : 'green'}`}><AlertCircleIcon /></div>
+                        <div style={{ flex: '1 1 0%' }}>
+                            <div className="ai-signal-title">{overdueInvoices.length} overdue invoice{overdueInvoices.length === 1 ? '' : 's'}</div>
+                            <div className="ai-signal-sub">{fmt(overdueAmt)} at risk</div>
+                        </div>
+                    </div>
+                    <div className="ai-signal-card">
+                        <div className={`ai-signal-icon ${pendingApprovals.length > 0 ? 'amber' : 'green'}`}><ClockSignalIcon /></div>
+                        <div style={{ flex: '1 1 0%' }}>
+                            <div className="ai-signal-title">{pendingApprovals.length} approval{pendingApprovals.length === 1 ? '' : 's'} pending</div>
+                            <div className="ai-signal-sub">Action needed today</div>
+                        </div>
+                    </div>
+                    <div className="ai-signal-card">
+                        <div className="ai-signal-icon green"><TrendIcon size={16} /></div>
+                        <div style={{ flex: '1 1 0%' }}>
+                            <div className="ai-signal-title">{fmt(pipelineTotal)} in pipeline</div>
+                            <div className="ai-signal-sub">{pipelineQuotes.length} open quote{pipelineQuotes.length === 1 ? '' : 's'}</div>
+                        </div>
+                    </div>
+                </div>
 
                 <div className="ai-section-label" style={{ marginTop: 16 }}>Gateway Status</div>
                 <div>
@@ -584,20 +877,16 @@ export default function FinanceHome() {
                 <div className="ai-section-label" style={{ marginTop: 16 }}>Today's Activity</div>
                 <div>
                     <div className="ai-snapshot-row" style={{ padding: '8px 0' }}>
-                        <span className="label">Customers</span>
-                        <span className="val">{loading ? '…' : customers.length}</span>
+                        <span className="label">{invoicesSentToday.length} invoice{invoicesSentToday.length === 1 ? '' : 's'} sent</span>
+                        <span className="val">{loading ? '…' : fmt(invoicesSentTodayAmt)}</span>
                     </div>
                     <div className="ai-snapshot-row" style={{ padding: '8px 0' }}>
-                        <span className="label">Quotes total</span>
-                        <span className="val">{loading ? '…' : quotes.length}</span>
+                        <span className="label">{paymentsToday.length} payment{paymentsToday.length === 1 ? '' : 's'} received</span>
+                        <span className="val">{loading ? '…' : fmt(paymentsTodayAmt)}</span>
                     </div>
                     <div className="ai-snapshot-row" style={{ padding: '8px 0' }}>
-                        <span className="label">Imported txns</span>
-                        <span className="val">{loading ? '…' : txns.length}</span>
-                    </div>
-                    <div className="ai-snapshot-row" style={{ padding: '8px 0' }}>
-                        <span className="label">Collected</span>
-                        <span className="val">{loading ? '…' : fmt(totalCollected)}</span>
+                        <span className="label">{quotesToday.length} quote{quotesToday.length === 1 ? '' : 's'} created</span>
+                        <span className="val">{loading ? '…' : fmt(quotesTodayAmt)}</span>
                     </div>
                 </div>
             </aside>

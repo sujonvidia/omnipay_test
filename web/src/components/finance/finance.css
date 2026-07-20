@@ -422,10 +422,7 @@ input, textarea { font-family: inherit; }
   background: var(--bg-card);
   border-left: 1px solid var(--border);
   padding: 28px 24px;
-  position: sticky;
-  top: 0;
-  height: calc(100vh - var(--topbar-h));
-  /* overflow-y: auto; */
+  min-height: calc(100vh - var(--topbar-h));
 }
 
 .ai-panel-header {
