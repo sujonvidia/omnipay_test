@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 
 const BASE = import.meta.env.VITE_BASE_URL || '';
 const authH = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
@@ -13,26 +14,144 @@ function fmt(n) {
     return `$${num.toFixed(2)}`;
 }
 
-function SparkleIcon({ size = 16 }) {
+function SparkleIcon({ size = 16, fill = 'var(--primary)' }) {
     return (
         <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-            <path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4L12 3z" fill="var(--primary)" />
-            <path d="M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14z" fill="var(--primary)" />
+            <path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4L12 3z" fill={fill} />
+            <path d="M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14z" fill={fill} />
         </svg>
     );
 }
 
+function nowTime() {
+    const d = new Date();
+    let h = d.getHours();
+    const m = d.getMinutes().toString().padStart(2, '0');
+    const ap = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return `${h}:${m} ${ap}`;
+}
+
+function AIBulletCard({ items }) {
+    return (
+        <div className="aiconv-card-wrap">
+            <div className="aiconv-bullets">
+                {items.map((it, i) => (
+                    <div key={i} className="aiconv-bullet">
+                        <div className={`aiconv-bullet-dot ${it.tone || 'violet'}`} />
+                        <div>
+                            <span className="aiconv-bullet-title">{it.text}</span>
+                            {it.sub && <span className="aiconv-bullet-sub"> — {it.sub}</span>}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+const has = (query, ...keywords) => keywords.some(k => query.toLowerCase().includes(k.toLowerCase()));
+
+// Scripted demo responses (matches the OmniPay POS design reference's
+// homeResponder) — placeholder until a real AI assistant is wired up.
+function homeResponder(query, navigate) {
+    if (has(query, 'attention', 'today', 'priority', 'first')) {
+        return {
+            text: "Here are today's highest-priority items. I'd start with the two pending approvals — they unlock $70.7K in pipeline.",
+            card: <AIBulletCard items={[
+                { tone: 'red', text: '6 quotes awaiting approval', sub: '$187K across 4 customers' },
+                { tone: 'red', text: '$45,000 overdue across 6 invoices', sub: 'Vertex, Meridian, BluePeak' },
+                { tone: 'amber', text: '3 customers with no response 5+ days', sub: 'Follow-up recommended' },
+                { tone: 'green', text: '1 approved quote ready to convert', sub: '$52,900 · Pinnacle Energy' },
+            ]} />,
+            actions: [
+                { label: 'Review approvals', onClick: () => navigate('/connect/finance/approvals') },
+                { label: 'View receivables', onClick: () => navigate('/connect/finance/receivables') },
+            ],
+            followUps: ['Show urgent approvals', 'Show overdue invoices', 'What should I do first?', "Summarize today's risk"],
+        };
+    }
+    if (has(query, 'urgent approval', 'show urgent')) {
+        return {
+            text: 'Two approvals are time-sensitive. Vertex Systems is on extended payment terms, and Pacific Corp is above the standard discount threshold.',
+            card: <AIBulletCard items={[
+                { tone: 'red', text: 'Q-2846 · Vertex Systems · $42,500', sub: 'Net 60 terms, 18% discount' },
+                { tone: 'amber', text: 'Q-2842 · Pacific Corp · $28,200', sub: 'Discount above 15% threshold' },
+            ]} />,
+            actions: [{ label: 'Open Approvals', onClick: () => navigate('/connect/finance/approvals') }],
+            followUps: ['Open approval queue', 'Who can approve high-value?', "Summarize today's risk"],
+        };
+    }
+    if (has(query, 'overdue', 'show overdue')) {
+        return {
+            text: '$45,000 is overdue across 6 invoices. Vertex Systems and Meridian Industrial together account for 70% of that exposure.',
+            card: <AIBulletCard items={[
+                { tone: 'red', text: 'Vertex Systems · $18,245', sub: '3 invoices, oldest 21 days late' },
+                { tone: 'red', text: 'Meridian Industrial · $12,450', sub: 'INV-1199 · 14 days past due' },
+                { tone: 'amber', text: 'BluePeak Logistics · $3,700', sub: '21 days since last payment' },
+            ]} />,
+            actions: [{ label: 'Open Receivables', onClick: () => navigate('/connect/finance/receivables') }],
+            followUps: ['Send reminders', 'Show high-risk accounts', 'Sort by oldest overdue'],
+        };
+    }
+    if (has(query, 'risk', 'summarize')) {
+        return {
+            text: "Today's risk is concentrated in two areas: approval bottlenecks and overdue receivables from a small number of customers.",
+            card: <AIBulletCard items={[
+                { tone: 'red', text: 'Approval bottleneck', sub: '6 quotes awaiting approval — avg wait 2.1 days' },
+                { tone: 'red', text: 'Concentrated overdue risk', sub: '70% of overdue $ from 2 accounts' },
+                { tone: 'amber', text: 'Engagement dip', sub: '3 accounts no response in 5+ days' },
+            ]} />,
+            followUps: ['Show approval bottlenecks', 'Show high-risk accounts', 'What action should I take first?'],
+        };
+    }
+    return {
+        text: 'I can summarize what needs attention today, walk through overdue invoices, or surface urgent approvals. Try one of the suggestions below.',
+        followUps: ['What needs my attention today?', 'Show overdue invoices', "Summarize today's risk"],
+    };
+}
+
 function greeting() {
     const h = new Date().getHours();
+    if (h < 5) return 'Good night';
     if (h < 12) return 'Good morning';
     if (h < 18) return 'Good afternoon';
-    return 'Good evening';
+    if (h < 22) return 'Good evening';
+    return 'Good night';
 }
 
 export default function FinanceHome() {
     const user = useSelector(s => s.message.user);
+    const navigate = useNavigate();
     const [tabState, setTabState] = useState(1);
-    const [chipConv, setChipConv] = useState(false);
+    const [messages, setMessages] = useState([]);
+    const [followUps, setFollowUps] = useState([]);
+    const [followUpText, setFollowUpText] = useState('');
+    const chipConv = messages.length > 0;
+    const aiconvScrollRef = useRef(null);
+
+    const scrollConvToBottom = () => {
+        requestAnimationFrame(() => {
+            const el = aiconvScrollRef.current;
+            if (el) el.scrollTop = el.scrollHeight;
+        });
+    };
+
+    const ask = (query) => {
+        const q = typeof query === 'string' ? query : (query?.title || '');
+        if (!q.trim()) return;
+        const r = homeResponder(q, navigate);
+        setMessages(prev => [
+            ...prev,
+            { role: 'user', text: q, time: nowTime() },
+            { role: 'ai', text: r.text, card: r.card, actions: r.actions, time: nowTime() },
+        ]);
+        setFollowUps(r.followUps || []);
+        setFollowUpText('');
+        scrollConvToBottom();
+    };
+    const closeConv = () => { setMessages([]); setFollowUps([]); setFollowUpText(''); };
+    const [query, setQuery] = useState('');
 
     const [gateway, setGateway] = useState(null);
     const [txnSummary, setTxnSummary] = useState(null);
@@ -83,10 +202,14 @@ export default function FinanceHome() {
                 </div>
 
                 <div className="aibar">
-                    <form>
+                    <form onSubmit={(e) => { e.preventDefault(); ask(query); }}>
                         <div className="cmd-input">
                             <SparkleIcon size={16} />
-                            <input placeholder="Ask anything about your business..." defaultValue="" />
+                            <input
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Ask anything about your business..."
+                            />
                             <button type="button" className="cmd-input-mic">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
@@ -112,7 +235,7 @@ export default function FinanceHome() {
                                 { title: 'Show urgent approvals', cat: 'Approvals' },
                                 { title: "Summarize today's risk", cat: 'AI Summary' },
                             ].map(chip => (
-                                <div className="chip" key={chip.title} onClick={() => setChipConv(true)}>
+                                <div className="chip" key={chip.title} onClick={() => ask(chip.title)}>
                                     <span className="chip-icon"><SparkleIcon size={16} /></span>
                                     <div className="chip-body">
                                         <div className="chip-title">{chip.title}</div>
@@ -128,33 +251,101 @@ export default function FinanceHome() {
                             <div className="aiconv-header">
                                 <div className="aiconv-header-title">
                                     <SparkleIcon size={14} />
-                                    <span>AI Assistant</span>
+                                    <span>AI Conversation</span>
                                 </div>
-                                <button className="aiconv-close" onClick={() => setChipConv(false)}>
+                                <button className="aiconv-close" onClick={closeConv} title="Close conversation">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                         <line x1="18" y1="6" x2="6" y2="18" />
                                         <line x1="6" y1="6" x2="18" y2="18" />
                                     </svg>
                                 </button>
                             </div>
-                            <div className="aiconv-scroll">
-                                <div className="aiconv-msg aiconv-msg-ai">
-                                    <div className="aiconv-avatar aiconv-avatar-ai"><SparkleIcon size={14} /></div>
-                                    <div className="aiconv-bubble-wrap">
-                                        <div className="aiconv-text">AI assistant is not yet connected. Configure an OpenAI key to enable this feature.</div>
+                            <div className="aiconv-scroll" ref={aiconvScrollRef}>
+                                {messages.map((m, i) => m.role === 'user' ? (
+                                    <div key={i} className="aiconv-msg aiconv-msg-user">
+                                        <div className="aiconv-bubble-wrap aiconv-bubble-wrap-user">
+                                            <div className="aiconv-meta aiconv-meta-user">
+                                                <span className="aiconv-meta-name">You</span>
+                                                <span className="aiconv-meta-dot">·</span>
+                                                <span className="aiconv-meta-time">{m.time}</span>
+                                            </div>
+                                            <div className="aiconv-bubble-user">{m.text}</div>
+                                        </div>
+                                        <div className="aiconv-avatar aiconv-avatar-user">
+                                            {(user?.firstname?.charAt(0) || '') + (user?.lastname?.charAt(0) || '') || 'U'}
+                                        </div>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div key={i} className="aiconv-msg aiconv-msg-ai">
+                                        <div className="aiconv-avatar aiconv-avatar-ai"><SparkleIcon size={14} fill="white" /></div>
+                                        <div className="aiconv-bubble-wrap">
+                                            <div className="aiconv-meta">
+                                                <span className="aiconv-meta-name">AI Assistant</span>
+                                                <span className="aiconv-meta-dot">·</span>
+                                                <span className="aiconv-meta-time">{m.time}</span>
+                                            </div>
+                                            <div className="aiconv-text">{m.text}</div>
+                                            {m.card}
+                                            {m.actions && m.actions.length > 0 && (
+                                                <div className="aiconv-actions">
+                                                    {m.actions.map((a, ai) => (
+                                                        <button key={ai} className={`btn ${ai === 0 ? 'btn-primary' : 'btn-secondary'} btn-sm`} onClick={a.onClick}>
+                                                            {a.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            <div className="aiconv-feedback">
+                                                <button title="Helpful">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" />
+                                                    </svg>
+                                                </button>
+                                                <button title="Not helpful">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zM17 2h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3" />
+                                                    </svg>
+                                                </button>
+                                                <button title="Copy">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
+
+                            {followUps.length > 0 && (
+                                <div className="aiconv-followups">
+                                    {followUps.map((f, i) => (
+                                        <button key={i} className="aiconv-followup" onClick={() => ask(f)}>
+                                            <span className="aiconv-followup-icon"><SparkleIcon size={12} /></span>
+                                            <span>{f}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
                             <div className="aiconv-input-wrap">
-                                <div className="cmd-input aiconv-input">
+                                <form onSubmit={(e) => { e.preventDefault(); ask(followUpText); }} className="cmd-input aiconv-input">
                                     <SparkleIcon size={14} />
-                                    <input placeholder="Ask a follow-up..." defaultValue="" />
-                                    <button className="cmd-input-btn">
+                                    <input
+                                        value={followUpText}
+                                        onChange={(e) => setFollowUpText(e.target.value)}
+                                        placeholder="Ask a follow-up..."
+                                    />
+                                    <button type="submit" className="cmd-input-btn">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <line x1="12" y1="19" x2="12" y2="5" />
                                             <polyline points="5 12 12 5 19 12" />
                                         </svg>
                                     </button>
+                                </form>
+                                <div className="aiconv-disclaimer">
+                                    AI responses may include insights from across your data. Verify important decisions.
                                 </div>
                             </div>
                         </div>
