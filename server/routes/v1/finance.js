@@ -39,7 +39,16 @@ const {
     FinanceCustomer,
 } = require('../../database/Models/Finance');
 const { FinanceCommission } = require('../../database/Models/Commission');
+const { FinanceActivityLog } = require('../../database/Models/ActivityLog');
 const { conna } = require('../../database/util');
+
+// Fire-and-forget append to the activity feed — never blocks or fails the
+// caller's response; a logging hiccup shouldn't break a real finance action.
+const logActivity = (company_id, type, title, sub, ref_id, ref_model, actor_id) => {
+    FinanceActivityLog.create({ company_id, type, title, sub, ref_id, ref_model, actor_id }).catch((err) =>
+        console.error('[finance/activity-log] write failed:', err.message)
+    );
+};
 const isDbReady = () => conna && conna.readyState === 1;
 
 router.get('/finance/payment/:retref', verifyFinanceAccess, async (req, res) => {
@@ -447,6 +456,7 @@ router.post('/finance/quotes', verifyFinanceAccess, async (req, res) => {
                 return res.status(cpErr.response?.status || 502).json({ status: false, error: cpErr.response?.data || cpErr.message });
             }
             if (authResult.respstat !== 'A') {
+                logActivity(company_id, 'payment_declined', 'Payment declined', `${customer.name} · ${authResult.resptext || 'declined'}`, customer._id, 'FinanceCustomer', req.loggedInUserId);
                 return res.status(402).json({ status: false, error: authResult.resptext || 'Card was declined', data: authResult });
             }
         }
@@ -507,6 +517,10 @@ router.post('/finance/quotes', verifyFinanceAccess, async (req, res) => {
             currency:          customer.currency || 'USD',
         });
 
+        logActivity(company_id, 'quote_created', `Quote created for ${customer.name}`, `${quote_number} · $${computed_total.toFixed(2)}`, quote._id, 'FinanceQuote', req.loggedInUserId);
+        logActivity(company_id, 'payment_charged', 'Payment charged', `${customer.name} · $${computed_total.toFixed(2)}${test_mode ? ' (test)' : ''}`, transaction._id, 'FinanceTransaction', req.loggedInUserId);
+        logActivity(company_id, 'commission_recorded', `Commission recorded (${commission_rate}%)`, `$${commission_amount.toFixed(2)} · net $${net_amount.toFixed(2)}`, commission._id, 'FinanceCommission', req.loggedInUserId);
+
         res.json({ status: true, data: quote, transaction, commission });
     } catch (err) {
         res.status(500).json({ status: false, error: err.message });
@@ -526,6 +540,22 @@ router.get('/finance/commissions', verifyFinanceAccess, async (req, res) => {
             net: acc.net + (c.net_amount || 0),
         }), { gross: 0, commission: 0, net: 0 });
         res.json({ status: true, data: commissions, totals });
+    } catch (err) {
+        res.status(500).json({ status: false, error: err.message });
+    }
+});
+
+// GET /finance/activity-log — chronological feed backing the header
+// Notifications + Recent popovers. ?limit= caps how many rows come back
+// (defaults 20, capped at 100).
+router.get('/finance/activity-log', verifyFinanceAccess, async (req, res) => {
+    if (!isDbReady()) return res.json({ status: true, data: [] });
+    try {
+        const company_id = req.company_id;
+        const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+        const filter = company_id ? { company_id, has_delete: { $ne: company_id } } : {};
+        const events = await FinanceActivityLog.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+        res.json({ status: true, data: events });
     } catch (err) {
         res.status(500).json({ status: false, error: err.message });
     }
@@ -786,6 +816,7 @@ router.post('/finance/customers', verifyFinanceAccess, async (req, res) => {
             notes,
             ...(cardpointe_profile_id && { cardpointe_profile_id, cardpointe_acct_id }),
         });
+        logActivity(company_id, 'customer_created', 'New customer added', customer.name, customer._id, 'FinanceCustomer', req.loggedInUserId);
         res.json({ status: true, data: customer, cardpointe_profile: cp_profile || null });
     } catch (err) {
         res.status(500).json({ status: false, error: err.message });
@@ -836,6 +867,7 @@ router.post('/finance/customers/import-profile', verifyFinanceAccess, async (req
             cardpointe_profile_id: profileid,
             cardpointe_acct_id: acctid,
         });
+        logActivity(company_id, 'customer_profile_imported', 'CardPointe profile imported', customer.name, customer._id, 'FinanceCustomer', req.loggedInUserId);
         res.json({ status: true, data: customer, cardpointe_data: record });
     } catch (err) {
         res.status(500).json({ status: false, error: err.message });
