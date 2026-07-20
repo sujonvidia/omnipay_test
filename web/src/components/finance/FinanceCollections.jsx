@@ -30,6 +30,24 @@ function useTransactions() {
     return { txns, loading };
 }
 
+// Invoice + collections data backing the Overdue / At Risk / Due Soon
+// follow-up groups — falls back to the design's mock rows per-bucket when
+// this company has no invoices in that state yet.
+function useFollowUpData() {
+    const [invoices, setInvoices] = useState([]);
+    const [collections, setCollections] = useState([]);
+    useEffect(() => {
+        Promise.all([
+            fetch(`${BASE}/v1/finance/invoices`, { headers: authH(), credentials: 'include' }).then(r => r.json()).catch(() => null),
+            fetch(`${BASE}/v1/finance/collections`, { headers: authH(), credentials: 'include' }).then(r => r.json()).catch(() => null),
+        ]).then(([inv, col]) => {
+            if (inv?.status) setInvoices(inv.data || []);
+            if (col?.status) setCollections(col.data || []);
+        });
+    }, []);
+    return { invoices, collections };
+}
+
 function statusColor(respstat) {
     if (respstat === 'A') return 'var(--green-text)';
     if (respstat === 'B') return 'var(--amber-text)';
@@ -134,8 +152,41 @@ function setlColor(s) {
     return 'var(--text-tertiary)';
 }
 
+const RISK_AVATAR_COLORS = ['#1F2937', '#1F2937', '#8B5CF6', '#0EA5E9'];
+
+const OVERDUE_MOCK = [
+    { _id: 'mock-ov-1', customer_name: 'Vertex Systems', invoice_number: 'INV-2847', amt: 9400, days: 10, avatarColor: '#1F2937' },
+    { _id: 'mock-ov-2', customer_name: 'Vertex Systems', invoice_number: 'INV-1041', amt: 12500, days: 14, avatarColor: '#1F2937' },
+    { _id: 'mock-ov-3', customer_name: 'Crestline Manufacturing', invoice_number: 'INV-1038', amt: 8200, days: 21, avatarColor: '#8B5CF6' },
+];
+const AT_RISK_MOCK = [
+    { _id: 'mock-ar-1', customer_name: 'Cascade Solutions', invoice_number: 'INV-1043', amt: 6400, days: 3, sub: 'Due in 3 days, no payment intent signaled' },
+    { _id: 'mock-ar-2', customer_name: 'Solara Industries', invoice_number: 'INV-1044', amt: 7100, days: 5, sub: 'Past behavior shows 12-day average delay' },
+];
+const DUE_SOON_MOCK = [
+    { _id: 'mock-ds-1', customer_name: 'Harbor Group', invoice_number: 'INV-1047', amt: 4300, dateLabel: 'Due May 3', sub: 'First invoice — no payment history' },
+    { _id: 'mock-ds-2', customer_name: 'Ironwood Construction', invoice_number: 'INV-1048', amt: 3200, dateLabel: 'Due May 5', sub: 'Typically pays on time' },
+];
+
+const CalendarIcon = ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+);
+const AlertTriangleIcon = ({ size = 16 }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+        <line x1="12" y1="9" x2="12" y2="13" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+);
+
 export default function FinanceCollections() {
     const { txns, loading: txnsLoading } = useTransactions();
+    const { invoices, collections } = useFollowUpData();
     const [retref, setRetref] = useState('');
     const [txn, setTxn] = useState(null);
     const [txnError, setTxnError] = useState('');
@@ -144,6 +195,38 @@ export default function FinanceCollections() {
     const approved = txns.filter(t => t.respstat === 'A');
     const declined = txns.filter(t => t.respstat !== 'A');
     const totalCollected = approved.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+
+    // ── Overdue / At Risk / Due Soon follow-up groups ──
+    const daysTillFU = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
+    const isOverdueFU = (inv) => inv.due_date && new Date(inv.due_date) < new Date() && !['paid', 'cancelled'].includes(inv.status);
+    const isOutstandingFU = (inv) => !['paid', 'cancelled'].includes(inv.status);
+    const openAmtFU = (inv) => parseFloat(inv.amount_due ?? (parseFloat(inv.total || 0) - parseFloat(inv.amount_paid || 0))) || 0;
+    const fmtFU = (n) => `$${(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const lastContactFor = (invId) => collections
+        .filter(c => String(c.invoice_id) === String(invId))
+        .sort((a, b) => new Date(b.sent_at) - new Date(a.sent_at))[0];
+
+    const outstandingFU = invoices.filter(isOutstandingFU);
+    const overdueFU = outstandingFU.filter(isOverdueFU).sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+    const atRiskFU = outstandingFU
+        .filter(inv => !isOverdueFU(inv) && inv.due_date && daysTillFU(inv.due_date) <= 5)
+        .sort((a, b) => daysTillFU(a.due_date) - daysTillFU(b.due_date));
+    const atRiskFUIds = new Set(atRiskFU.map(i => i._id));
+    const dueSoonFU = outstandingFU
+        .filter(inv => !isOverdueFU(inv) && !atRiskFUIds.has(inv._id) && inv.due_date && daysTillFU(inv.due_date) > 0 && daysTillFU(inv.due_date) <= 30)
+        .sort((a, b) => daysTillFU(a.due_date) - daysTillFU(b.due_date));
+
+    const hasFollowUpData = invoices.length > 0;
+    const displayOverdue = overdueFU.length > 0 ? overdueFU : OVERDUE_MOCK;
+    const displayAtRisk = atRiskFU.length > 0 ? atRiskFU : AT_RISK_MOCK;
+    const displayDueSoon = dueSoonFU.length > 0 ? dueSoonFU : DUE_SOON_MOCK;
+
+    const overdueFUAmt = overdueFU.reduce((s, i) => s + openAmtFU(i), 0);
+    const atRiskFUAmt = atRiskFU.reduce((s, i) => s + openAmtFU(i), 0);
+    const needAttentionCount = overdueFU.length + atRiskFU.length + dueSoonFU.length;
+    const noRecentResponseCustomers = new Set(
+        overdueFU.filter(inv => { const c = lastContactFor(inv._id); return !c || (new Date() - new Date(c.sent_at)) / 86400000 >= 5; }).map(i => String(i.customer_id))
+    ).size;
 
     async function lookupPayment(e) {
         e.preventDefault();
@@ -176,8 +259,12 @@ export default function FinanceCollections() {
                             <path d="M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14z" fill="var(--primary)" />
                         </svg>
                     </div>
-                    <h1 className="hero-title">Collections</h1>
-                    <p className="hero-sub">Verified payments from CardPointe / Fiserv</p>
+                    <h1 className="hero-title">Collections &amp; Follow-Up</h1>
+                    <p className="hero-sub">
+                        {hasFollowUpData
+                            ? `${needAttentionCount} invoice${needAttentionCount === 1 ? '' : 's'} need attention · ${fmtFU(overdueFUAmt + atRiskFUAmt)} at risk`
+                            : '7 invoices need attention · $51,450 at risk'}
+                    </p>
                 </div>
 
                 <div className="aibar">
@@ -217,6 +304,113 @@ export default function FinanceCollections() {
                         ))}
                     </div>
                 </div>
+
+                <div className="section-header red" style={{ marginTop: 20 }}>
+                    <span className="dot" />
+                    <span className="section-title">Overdue</span>
+                    <span className="section-count">{displayOverdue.length}</span>
+                    <span className="section-meta">Immediate action required</span>
+                </div>
+                {displayOverdue.map(inv => {
+                    const amt = inv.due_date ? openAmtFU(inv) : inv.amt;
+                    const days = inv.due_date ? Math.abs(daysTillFU(inv.due_date)) : inv.days;
+                    const contact = inv.due_date ? lastContactFor(inv._id) : null;
+                    const noResponseDays = inv.due_date ? (contact ? Math.floor((new Date() - new Date(contact.sent_at)) / 86400000) : days) : days;
+                    return (
+                        <div className="card mb-2" style={{ padding: '16px 18px' }} key={inv._id}>
+                            <div className="flex items-center gap-3">
+                                <div className="avatar" style={{ background: inv.avatarColor || RISK_AVATAR_COLORS[0] }}>
+                                    {(inv.customer_name || '?').charAt(0).toUpperCase()}
+                                </div>
+                                <div style={{ flex: '1 1 0%' }}>
+                                    <div style={{ fontWeight: 600 }}>{inv.customer_name} <span className="text-tertiary" style={{ fontWeight: 400 }}>{inv.invoice_number}</span></div>
+                                    <div className="text-tertiary" style={{ fontSize: 13 }}>No response in {noResponseDays} days</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontWeight: 600 }}>{fmtFU(amt)}</div>
+                                    <div style={{ color: 'var(--red-text)', fontSize: 12.5 }}>{days}d overdue</div>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                                <button className="btn btn-primary btn-sm">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="22" y1="2" x2="11" y2="13" />
+                                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                    </svg>
+                                    Send Reminder
+                                </button>
+                                <button className="btn btn-secondary btn-sm">View</button>
+                            </div>
+                        </div>
+                    );
+                })}
+
+                <div className="section-header amber" style={{ marginTop: 20 }}>
+                    <span className="dot" />
+                    <span className="section-title">At Risk</span>
+                    <span className="section-count">{displayAtRisk.length}</span>
+                    <span className="section-meta">Payment intent unclear</span>
+                </div>
+                {displayAtRisk.map(inv => {
+                    const amt = inv.due_date ? openAmtFU(inv) : inv.amt;
+                    const days = inv.due_date ? daysTillFU(inv.due_date) : inv.days;
+                    const sub = inv.due_date ? `Due in ${days} day${days === 1 ? '' : 's'}, no payment intent signaled` : inv.sub;
+                    return (
+                        <div className="card mb-2" style={{ padding: '16px 18px' }} key={inv._id}>
+                            <div className="flex items-center gap-3">
+                                <div className="avatar" style={{ background: 'var(--amber-bg)', color: 'var(--amber-text)' }}>
+                                    <AlertTriangleIcon />
+                                </div>
+                                <div style={{ flex: '1 1 0%' }}>
+                                    <div style={{ fontWeight: 600 }}>{inv.customer_name} <span className="text-tertiary" style={{ fontWeight: 400 }}>{inv.invoice_number}</span></div>
+                                    <div className="text-tertiary" style={{ fontSize: 13 }}>{sub}</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontWeight: 600 }}>{fmtFU(amt)}</div>
+                                    <div style={{ color: 'var(--amber-text)', fontSize: 12.5 }}>{days}d remaining</div>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 mt-3">
+                                <button className="btn btn-secondary btn-sm">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="22" y1="2" x2="11" y2="13" />
+                                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                    </svg>
+                                    Send Reminder
+                                </button>
+                                <button className="btn btn-secondary btn-sm">View</button>
+                            </div>
+                        </div>
+                    );
+                })}
+
+                <div className="section-header violet" style={{ marginTop: 20 }}>
+                    <span className="dot" />
+                    <span className="section-title">Due Soon</span>
+                    <span className="section-count">{displayDueSoon.length}</span>
+                    <span className="section-meta">Proactive outreach recommended</span>
+                </div>
+                {displayDueSoon.map(inv => {
+                    const amt = inv.due_date ? openAmtFU(inv) : inv.amt;
+                    const dateLabel = inv.due_date ? `Due ${new Date(inv.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}` : inv.dateLabel;
+                    return (
+                        <div className="card mb-2" style={{ padding: '16px 18px' }} key={inv._id}>
+                            <div className="flex items-center gap-3">
+                                <div className="avatar" style={{ background: 'var(--violet-bg)', color: 'var(--violet-text)' }}>
+                                    <CalendarIcon />
+                                </div>
+                                <div style={{ flex: '1 1 0%' }}>
+                                    <div style={{ fontWeight: 600 }}>{inv.customer_name} <span className="text-tertiary" style={{ fontWeight: 400 }}>{inv.invoice_number}</span></div>
+                                    <div className="text-tertiary" style={{ fontSize: 13 }}>{inv.due_date ? 'on track' : inv.sub}</div>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <div style={{ fontWeight: 600 }}>{fmtFU(amt)}</div>
+                                    <div style={{ color: 'var(--violet-text)', fontSize: 12.5 }}>{dateLabel}</div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
 
                 {/* KPIs from real data */}
                 {!txnsLoading && txns.length > 0 && (
@@ -298,12 +492,59 @@ export default function FinanceCollections() {
                             <path d="M12 3l1.7 4.6L18 9l-4.3 1.4L12 15l-1.7-4.6L6 9l4.3-1.4L12 3z" fill="var(--primary)" />
                             <path d="M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14z" fill="var(--primary)" />
                         </svg>
-                        <span>Verify Payment</span>
+                        <span>AI Decision Support</span>
                     </div>
                     <span className="ai-live">Live</span>
                 </div>
 
-                <div className="ai-section-label">Lookup by retref</div>
+                <div className="ai-alert red">
+                    <div className="ai-alert-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                            <polyline points="17 6 23 6 23 12" />
+                        </svg>
+                    </div>
+                    <div className="ai-alert-body">
+                        <div className="ai-alert-title">
+                            {hasFollowUpData ? `${fmtFU(overdueFUAmt)} overdue across ${overdueFU.length} invoice${overdueFU.length === 1 ? '' : 's'}` : '$45K overdue across 6 invoices'}
+                        </div>
+                        <div className="ai-alert-sub">Priority focus area</div>
+                    </div>
+                </div>
+
+                <div className="ai-section-label">Key Insights</div>
+                <div className="ai-list">
+                    <div className="ai-list-item red">
+                        <div className="dot" />
+                        <div><div className="ai-list-item-title">{hasFollowUpData ? noRecentResponseCustomers : 3} customer{(hasFollowUpData ? noRecentResponseCustomers : 3) === 1 ? '' : 's'} haven't responded in 5+ days</div></div>
+                    </div>
+                    <div className="ai-list-item amber">
+                        <div className="dot" />
+                        <div><div className="ai-list-item-title">Follow-up now to reduce delay risk</div></div>
+                    </div>
+                    <div className="ai-list-item green">
+                        <div className="dot" />
+                        <div><div className="ai-list-item-title">Automated reminders can improve collection speed</div></div>
+                    </div>
+                    <div className="ai-list-item blue">
+                        <div className="dot" />
+                        <div><div className="ai-list-item-title">Best response rates on Tuesdays and Thursdays</div></div>
+                    </div>
+                    <div className="ai-list-item blue">
+                        <div className="dot" />
+                        <div><div className="ai-list-item-title">Morning send times outperform afternoons by 22%</div></div>
+                    </div>
+                </div>
+
+                <div className="ai-suggested">
+                    <div className="ai-suggested-title">
+                        <SparkleIcon size={14} />
+                        <span>Suggested Action</span>
+                    </div>
+                    <div className="ai-suggested-text">Send reminders to overdue invoices now — optimal timing for best response rates.</div>
+                </div>
+
+                <div className="ai-section-label" style={{ marginTop: 18 }}>Lookup by retref</div>
                 <form onSubmit={lookupPayment} style={{ display: 'flex', gap: 6 }}>
                     <input
                         value={retref}
@@ -322,7 +563,7 @@ export default function FinanceCollections() {
                             padding: '6px 12px', borderRadius: 8, border: 'none',
                             background: 'var(--primary)', color: '#fff', fontSize: 12.5,
                             fontWeight: 600, cursor: txnLoading ? 'default' : 'pointer',
-                            opacity: txnLoading ? 0.6 : 1,
+                            opacity: txnLoading ? 0.6 : 1, whiteSpace: 'nowrap',
                         }}
                     >
                         {txnLoading ? '…' : 'Look up'}

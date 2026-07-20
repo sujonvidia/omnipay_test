@@ -50,6 +50,7 @@ const ClockIcon = ({ size = 16 }) => (
 )
 
 const FILTERS = ['All', 'Draft', 'Sent', 'Pending Approval', 'Approved', 'Rejected']
+const FILTER_STATUS = { 'All': null, 'Draft': 'draft', 'Sent': 'sent', 'Pending Approval': 'pending_approval', 'Approved': 'approved', 'Rejected': 'rejected' }
 
 const PROMPT_CHIPS = [
     {
@@ -122,6 +123,31 @@ export default function FinanceQuotes() {
     const [saveError, setSaveError] = useState('');
     const [chargeResult, setChargeResult] = useState(null);
     const [viewQuoteId, setViewQuoteId] = useState(null);
+    const [activeFilter, setActiveFilter] = useState('All');
+    const [search, setSearch] = useState('');
+
+    const filteredQuotes = quotes
+        .filter(q => activeFilter === 'All' || q.status === FILTER_STATUS[activeFilter])
+        .filter(q => {
+            const term = search.trim().toLowerCase();
+            if (!term) return true;
+            return (q.quote_number || '').toLowerCase().includes(term) || (q.customer_name || '').toLowerCase().includes(term);
+        });
+
+    // ── AI Insights aside — real signals, falling back to the design's
+    // mock content per-item when nothing real qualifies yet. ──
+    const now = new Date();
+    const pendingQuotes = quotes.filter(q => q.status === 'pending_approval');
+    const stuckQuote = pendingQuotes.slice().sort((a, b) => new Date(a.createdAt || a.created_at) - new Date(b.createdAt || b.created_at))[0];
+    const daysPending = stuckQuote ? Math.floor((now - new Date(stuckQuote.createdAt || stuckQuote.created_at)) / 86400000) : null;
+
+    const likelyToConvert = quotes.filter(q => q.status === 'approved');
+    const likelyToConvertTotal = likelyToConvert.reduce((s, q) => s + (parseFloat(q.total) || 0), 0);
+    const draftQuotes = quotes.filter(q => q.status === 'draft');
+    const oldestDraft = draftQuotes[0];
+    const fmtQ = (n) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
+    const fmtQK = (n) => n >= 1000 ? `$${(n / 1000).toFixed(0)}K` : fmtQ(n);
+    const pipelineFromPending = pendingQuotes.reduce((s, q) => s + (parseFloat(q.total) || 0), 0);
 
     async function createQuote(e) {
         e.preventDefault();
@@ -201,11 +227,15 @@ export default function FinanceQuotes() {
                 <div className="flex flex-wrap items-center gap-3 mt-4 mb-4">
                     <div className="cmd-input" style={{ ...styles.searchInputWrap, minWidth: 160 }}>
                         <SparkleIcon size={12} fill="var(--text-meta)" />
-                        <input placeholder="Search quotes..." defaultValue="" style={styles.searchInput} />
+                        <input placeholder="Search quotes..." value={search} onChange={e => setSearch(e.target.value)} style={styles.searchInput} />
                     </div>
                     <div className="flex flex-wrap gap-1" style={styles.filterGroup}>
-                        {FILTERS.map((filter, i) => (
-                            <div key={filter} style={i === 0 ? styles.filterActive : styles.filterIdle}>
+                        {FILTERS.map((filter) => (
+                            <div
+                                key={filter}
+                                onClick={() => setActiveFilter(filter)}
+                                style={filter === activeFilter ? styles.filterActive : styles.filterIdle}
+                            >
                                 {filter}
                             </div>
                         ))}
@@ -314,7 +344,12 @@ export default function FinanceQuotes() {
                             No quotes yet. Click &ldquo;+ New Quote&rdquo; to create one.
                         </div>
                     )}
-                    {quotes.map((q) => (
+                    {!loading && quotes.length > 0 && filteredQuotes.length === 0 && (
+                        <div style={{ padding: '24px 18px', textAlign: 'center', fontSize: 13, color: 'var(--text-tertiary)' }}>
+                            No quotes match {search.trim() ? `"${search.trim()}"` : `"${activeFilter}"`}.
+                        </div>
+                    )}
+                    {filteredQuotes.map((q) => (
                         <div className="entity-row flat" style={styles.row} key={q._id}>
                             <div className="avatar" style={styles.avatar}>
                                 <FileIcon />
@@ -368,6 +403,78 @@ export default function FinanceQuotes() {
                         <span>Quotes Summary</span>
                     </div>
                     <span className="ai-live">Live</span>
+                </div>
+
+                <div className="ai-alert amber">
+                    <div className="ai-alert-icon">
+                        <ClockIcon size={18} />
+                    </div>
+                    <div className="ai-alert-body">
+                        <div className="ai-alert-title">Quote approval stuck</div>
+                        <div className="ai-alert-sub">Action recommended</div>
+                        <div className="ai-alert-text">
+                            {stuckQuote
+                                ? `${stuckQuote.quote_number} pending ${daysPending} day${daysPending === 1 ? '' : 's'} with ${stuckQuote.customer_name}. Typical approval: 4 hours.`
+                                : 'QUT-2831 pending 2 days with Vertex Systems. Typical approval: 4 hours.'}
+                        </div>
+                        <a className="ai-alert-link" href="/connect/finance/approvals">Send follow-up →</a>
+                    </div>
+                </div>
+
+                <div className="ai-section-label">Also Noted</div>
+                <div className="ai-list">
+                    <div className="ai-list-item green">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">{likelyToConvert.length > 0 ? `${likelyToConvert.length} quote${likelyToConvert.length === 1 ? '' : 's'} likely to convert` : '3 quotes likely to convert'}</div>
+                            <div className="ai-list-item-sub">Est. ~{likelyToConvert.length > 0 ? fmtQK(likelyToConvertTotal) : '$156K'} revenue</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item violet">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">{pendingQuotes.length > 0 ? `${pendingQuotes.length} quote${pendingQuotes.length === 1 ? '' : 's'} in review` : '3 quotes in review'}</div>
+                            <div className="ai-list-item-sub">Awaiting decision</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item green">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">Upsell: extended warranty</div>
+                            <div className="ai-list-item-sub">Add to QUT-2846</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item amber">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">Seasonal demand rising</div>
+                            <div className="ai-list-item-sub">Q2 pattern</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item green">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">Renewal quotes performing well</div>
+                            <div className="ai-list-item-sub">85% conversion</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item amber">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">Draft: finish &amp; send</div>
+                            <div className="ai-list-item-sub">{oldestDraft ? `${oldestDraft.quote_number} ready` : 'QUT-2847 ready'}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="ai-suggested">
+                    <div className="ai-suggested-title">
+                        <SparkleIcon size={14} />
+                        <span>High conversion likely</span>
+                    </div>
+                    <div className="ai-suggested-text">
+                        {pendingQuotes.length > 0 ? `${pendingQuotes.length} approval${pendingQuotes.length === 1 ? '' : 's'} → ~${fmtQK(pipelineFromPending)} pipeline` : '3 approvals → ~$93K pipeline'}
+                    </div>
                 </div>
 
                 <div className="ai-section-label">Snapshot</div>

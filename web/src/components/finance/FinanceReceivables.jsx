@@ -19,6 +19,19 @@ function useProfiles() {
     return { profile, profileLoading, profileError, fetchProfile: fetch_ };
 }
 
+function useInvoices() {
+    const [invoices, setInvoices] = useState([]);
+    const [invLoading, setInvLoading] = useState(true);
+    useEffect(() => {
+        fetch(`${BASE}/v1/finance/invoices`, { headers: authH(), credentials: 'include' })
+            .then(r => r.json())
+            .then(j => { if (j.status) setInvoices(j.data || []); })
+            .catch(() => {})
+            .finally(() => setInvLoading(false));
+    }, []);
+    return { invoices, invLoading };
+}
+
 function useTransactions() {
     const [txns, setTxns] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -58,8 +71,12 @@ function setlColor(s) {
     return 'var(--text-tertiary)';
 }
 
+const RISK_AVATAR_COLORS = ['#1F2937', '#F59E0B', '#EF4444', '#6B7280', '#0EA5E9'];
+
 export default function FinanceReceivables() {
     const { txns, loading, error, reload } = useTransactions();
+    const { invoices, invLoading } = useInvoices();
+    const [pageTab, setPageTab] = useState('receivables');
     const [importRef, setImportRef] = useState('');
     const [importing, setImporting] = useState(false);
     const [importError, setImportError] = useState('');
@@ -119,6 +136,52 @@ export default function FinanceReceivables() {
     const approved = txns.filter(t => t.respstat === 'A');
     const declined = txns.filter(t => t.respstat === 'C');
     const totalAmt = approved.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+
+    // ── Invoice-based receivables (Overdue / At Risk / Due Soon), real with
+    // per-section mock fallback from the design when nothing qualifies yet. ──
+    const daysTillInv = (d) => Math.ceil((new Date(d) - new Date()) / 86400000);
+    const isOverdueInv = (inv) => inv.due_date && new Date(inv.due_date) < new Date() && !['paid', 'cancelled'].includes(inv.status);
+    const isOutstandingInv = (inv) => !['paid', 'cancelled'].includes(inv.status);
+    const openAmt = (inv) => parseFloat(inv.amount_due ?? (parseFloat(inv.total || 0) - parseFloat(inv.amount_paid || 0))) || 0;
+    const fmtR = (n) => `$${Math.round(n || 0).toLocaleString('en-US')}`;
+
+    const outstandingInv = invoices.filter(isOutstandingInv);
+    const overdueInv = outstandingInv.filter(isOverdueInv).sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+    const atRiskInv = outstandingInv
+        .filter(inv => !isOverdueInv(inv) && inv.due_date && daysTillInv(inv.due_date) <= 5 && openAmt(inv) > 5000)
+        .sort((a, b) => daysTillInv(a.due_date) - daysTillInv(b.due_date));
+    const atRiskIds = new Set(atRiskInv.map(i => i._id));
+    const dueSoonInv = outstandingInv
+        .filter(inv => !isOverdueInv(inv) && !atRiskIds.has(inv._id) && inv.due_date && daysTillInv(inv.due_date) > 0 && daysTillInv(inv.due_date) <= 30)
+        .sort((a, b) => daysTillInv(a.due_date) - daysTillInv(b.due_date));
+
+    const overdueAmt = overdueInv.reduce((s, i) => s + openAmt(i), 0);
+    const outstandingAmt = outstandingInv.reduce((s, i) => s + openAmt(i), 0);
+    const paidAmt = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (parseFloat(i.amount_paid) || parseFloat(i.total) || 0), 0);
+    const totalInvoicedAll = invoices.reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
+    const collectedPct = totalInvoicedAll > 0 ? Math.round((paidAmt / totalInvoicedAll) * 100) : null;
+    const highRiskAccountCount = new Set(overdueInv.map(i => String(i.customer_id))).size;
+    const hasInvoiceData = invoices.length > 0;
+
+    // Per-customer aggregates for the "Also Noted" aside slots
+    const invByCust = {};
+    invoices.forEach(inv => {
+        const key = String(inv.customer_id);
+        if (!invByCust[key]) invByCust[key] = [];
+        invByCust[key].push(inv);
+    });
+    const custMultiOverdue = Object.entries(invByCust)
+        .map(([key, list]) => ({ name: list[0].customer_name, overdue: list.filter(isOverdueInv) }))
+        .filter(c => c.overdue.length >= 2)
+        .map(c => ({ name: c.name, amt: c.overdue.reduce((s, i) => s + openAmt(i), 0) }))
+        .sort((a, b) => b.amt - a.amt)[0];
+    const custOnTrack = outstandingInv
+        .filter(inv => !isOverdueInv(inv) && inv.due_date && daysTillInv(inv.due_date) > 0 && daysTillInv(inv.due_date) <= 7)
+        .sort((a, b) => daysTillInv(a.due_date) - daysTillInv(b.due_date))[0];
+    const custReliable = Object.entries(invByCust)
+        .map(([key, list]) => ({ name: list[0].customer_name, hasOverdue: list.some(isOverdueInv), paidCount: list.filter(i => i.status === 'paid').length }))
+        .filter(c => !c.hasOverdue && c.paidCount > 0)
+        .sort((a, b) => b.paidCount - a.paidCount)[0];
 
     async function doAuthorize(e) {
         e.preventDefault();
@@ -258,6 +321,147 @@ export default function FinanceReceivables() {
                         ))}
                     </div>
                 </div>
+
+                <div className="tabs" style={{ marginTop: 20 }}>
+                    <div onClick={() => setPageTab('receivables')} className={`tab ${pageTab === 'receivables' ? 'active' : ''}`}>Receivables</div>
+                    <div onClick={() => setPageTab('all')} className={`tab ${pageTab === 'all' ? 'active' : ''}`}>All Invoices</div>
+                </div>
+
+                {pageTab === 'receivables' && (
+                    <>
+                        <div className="status-banner red">
+                            <span className="dot" />
+                            <div>
+                                <b>Overdue invoices are driving risk:</b>{' '}
+                                {hasInvoiceData
+                                    ? `${fmtR(overdueAmt)} overdue across ${overdueInv.length} invoice${overdueInv.length === 1 ? '' : 's'}.`
+                                    : '$165,400 overdue across 18 invoices.'}
+                            </div>
+                        </div>
+
+                        <div className="section-header red">
+                            <span className="dot" />
+                            <span className="section-title">Overdue</span>
+                            <span className="section-count">{overdueInv.length > 0 ? overdueInv.length : 8}</span>
+                        </div>
+                        <div>
+                            {(overdueInv.length > 0 ? overdueInv : [
+                                { _id: 'm1', customer_name: 'Vertex Systems', amt: 9400, sub: '10 days overdue · no recent response' },
+                                { _id: 'm2', customer_name: 'Vertex Systems', amt: 12500, sub: '14 days overdue · customer typically pays late' },
+                            ]).map((inv, i) => (
+                                <div className="entity-row" key={inv._id || i}>
+                                    <div className="avatar" style={{ background: RISK_AVATAR_COLORS[i % RISK_AVATAR_COLORS.length] }}>
+                                        {(inv.customer_name || '?').charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="row-body">
+                                        <div className="row-title">
+                                            {inv.customer_name} <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>· {fmtR(inv.due_date ? openAmt(inv) : inv.amt)}</span>
+                                        </div>
+                                        <div className="row-sub">{inv.due_date ? `${daysTillInv(inv.due_date) * -1} days overdue` : inv.sub}</div>
+                                    </div>
+                                    <div className="row-actions">
+                                        <button className="btn btn-primary btn-sm">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <line x1="22" y1="2" x2="11" y2="13" />
+                                                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                            </svg>
+                                            Send Reminder
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="section-header amber">
+                            <span className="dot" />
+                            <span className="section-title">At Risk</span>
+                            <span className="section-count">{atRiskInv.length > 0 ? atRiskInv.length : 2}</span>
+                        </div>
+                        <div>
+                            {(atRiskInv.length > 0 ? atRiskInv : [
+                                { _id: 'm3', customer_name: 'Apex Utilities', amt: 12200, sub: 'due in 3 days · high value + slow payer' },
+                                { _id: 'm4', customer_name: 'TechCore Industries', amt: 8900, sub: 'due in 2 days · payment history shows delays' },
+                            ]).map((inv, i) => (
+                                <div className="entity-row" key={inv._id || i}>
+                                    <div className="avatar" style={{ background: RISK_AVATAR_COLORS[(i + 3) % RISK_AVATAR_COLORS.length] }}>
+                                        {(inv.customer_name || '?').charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="row-body">
+                                        <div className="row-title">
+                                            {inv.customer_name} <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>· {fmtR(inv.due_date ? openAmt(inv) : inv.amt)}</span>
+                                        </div>
+                                        <div className="row-sub">{inv.due_date ? `due in ${daysTillInv(inv.due_date)} day${daysTillInv(inv.due_date) === 1 ? '' : 's'}` : inv.sub}</div>
+                                    </div>
+                                    <div className="row-actions">
+                                        <button className="btn btn-secondary btn-sm">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                                                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                                            </svg>
+                                            Follow Up
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="section-header violet">
+                            <span className="dot" />
+                            <span className="section-title">Due Soon</span>
+                            <span className="section-count">{dueSoonInv.length > 0 ? dueSoonInv.length : 5}</span>
+                        </div>
+                        <div>
+                            {(dueSoonInv.length > 0 ? dueSoonInv : [
+                                { _id: 'm5', customer_name: 'Vertex Systems', amt: 5750, dateLabel: 'May 12, 2026' },
+                                { _id: 'm6', customer_name: 'Vertex Systems', amt: 3980, dateLabel: 'May 19, 2026' },
+                            ]).map((inv, i) => (
+                                <div className="entity-row" key={inv._id || i}>
+                                    <div className="avatar" style={{ background: RISK_AVATAR_COLORS[i % RISK_AVATAR_COLORS.length] }}>
+                                        {(inv.customer_name || '?').charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="row-body">
+                                        <div className="row-title">
+                                            {inv.customer_name} <span style={{ fontWeight: 400, color: 'var(--text-tertiary)' }}>· {fmtR(inv.due_date ? openAmt(inv) : inv.amt)}</span>
+                                        </div>
+                                        <div className="row-sub">Due {inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : inv.dateLabel} · on track</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
+
+                {pageTab === 'all' && (
+                    <>
+                        <div className="section-header blue" style={{ marginTop: 16 }}>
+                            <span className="dot" />
+                            <span className="section-title">All Invoices</span>
+                            {!invLoading && <span className="section-count">{invoices.length}</span>}
+                        </div>
+                        {invLoading && <div style={{ padding: '12px 0', fontSize: 13, color: 'var(--text-tertiary)' }}>Loading…</div>}
+                        {!invLoading && invoices.length === 0 && (
+                            <div style={{ padding: '12px 0', fontSize: 13, color: 'var(--text-tertiary)' }}>
+                                No invoices yet.
+                            </div>
+                        )}
+                        {invoices.length > 0 && (
+                            <div className="dlist">
+                                {invoices.map(inv => (
+                                    <div className="entity-row flat" key={inv._id} style={{ padding: '10px 4px' }}>
+                                        <div className="row-body">
+                                            <div className="row-title" style={{ fontSize: 13 }}>{inv.invoice_number} — {inv.customer_name}</div>
+                                            <div className="row-sub" style={{ fontSize: 11.5 }}>
+                                                <span className={`badge ${{ paid: 'green', overdue: 'red', draft: 'gray', cancelled: 'gray' }[inv.status] || 'violet'}`} style={{ fontSize: 10.5 }}>{inv.status}</span>
+                                                {' '}{inv.due_date ? `· due ${new Date(inv.due_date).toLocaleDateString()}` : ''}
+                                            </div>
+                                        </div>
+                                        <div style={{ fontWeight: 600, fontSize: 13 }}>{fmtR(inv.total)}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
 
                 {/* KPIs from real data */}
                 {!loading && txns.length > 0 && (
@@ -547,6 +751,102 @@ export default function FinanceReceivables() {
                         <span>Summary</span>
                     </div>
                     <span className="ai-live">Live</span>
+                </div>
+
+                <div className="ai-alert red">
+                    <div className="ai-alert-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                    </div>
+                    <div className="ai-alert-body">
+                        <div className="ai-alert-title">Overdue invoices are driving risk</div>
+                        <div className="ai-alert-sub">Highest impact on cash flow</div>
+                        <div className="ai-alert-text">
+                            {hasInvoiceData ? `${fmtR(overdueAmt)} overdue across ${overdueInv.length} invoice${overdueInv.length === 1 ? '' : 's'}` : '$165,400 overdue across 18 invoices'}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="ai-section-label">Key Metrics</div>
+                <div className="ai-list">
+                    <div className="ai-list-item red">
+                        <div className="dot" />
+                        <div><div className="ai-list-item-title">{hasInvoiceData ? overdueInv.length : 18} invoices overdue</div></div>
+                    </div>
+                    <div className="ai-list-item amber">
+                        <div className="dot" />
+                        <div><div className="ai-list-item-title">{hasInvoiceData ? highRiskAccountCount : 6} high-risk accounts</div></div>
+                    </div>
+                    <div className="ai-list-item green">
+                        <div className="dot" />
+                        <div><div className="ai-list-item-title">{fmtR(hasInvoiceData ? outstandingAmt : 234500)} total outstanding</div></div>
+                    </div>
+                </div>
+
+                <div className="ai-section-label">Focus on overdue invoices first</div>
+                <div className="ai-signal-card">
+                    <div className="ai-signal-icon green">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                            <polyline points="17 6 23 6 23 12" />
+                        </svg>
+                    </div>
+                    <div style={{ flex: '1 1 0%' }}>
+                        <div className="ai-signal-title">18% ahead of March pace</div>
+                        <div className="ai-signal-sub">
+                            {hasInvoiceData && collectedPct != null ? `${collectedPct}% collected · ${fmtR(outstandingAmt)} remaining` : '29% collected · $165,400 remaining'}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="ai-section-label">Also Noted</div>
+                <div className="ai-list">
+                    <div className="ai-list-item amber">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">{custMultiOverdue ? `${custMultiOverdue.name} has multiple overdue` : 'Meridian has multiple overdue'}</div>
+                            <div className="ai-list-item-sub">{fmtR(custMultiOverdue ? custMultiOverdue.amt : 12200)} total</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item green">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">{custOnTrack ? `${custOnTrack.customer_name} payment on track` : 'Nova Corp payment on track'}</div>
+                            <div className="ai-list-item-sub">Due in {custOnTrack ? daysTillInv(custOnTrack.due_date) : 5} days</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item amber">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">Apex at risk despite high value</div>
+                            <div className="ai-list-item-sub">Slow payment history</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item amber">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">TechCore shows delay patterns</div>
+                            <div className="ai-list-item-sub">Watch closely</div>
+                        </div>
+                    </div>
+                    <div className="ai-list-item green">
+                        <div className="dot" />
+                        <div>
+                            <div className="ai-list-item-title">{custReliable ? `${custReliable.name} reliable payer` : 'Pacific Solutions reliable payer'}</div>
+                            <div className="ai-list-item-sub">Low risk</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="ai-suggested">
+                    <div className="ai-suggested-title">
+                        <SparkleIcon size={14} />
+                        <span>Total outstanding</span>
+                    </div>
+                    <div className="ai-suggested-text">{fmtR(hasInvoiceData ? outstandingAmt : 234500)} across all accounts</div>
                 </div>
 
                 <div className="ai-section-label">Payment Stats</div>
