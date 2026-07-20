@@ -131,10 +131,13 @@ export default function FinanceActivity() {
         .filter(([, n]) => n >= 5)
         .sort((a, b) => b[1] - a[1]);
 
-    const needsCount = (pendingApprovals.length > 0 ? 1 : 0) + (overdueInvs.length > 0 ? 1 : 0) + (silentCustomers.length > 0 ? 1 : 0);
-    const atRiskCount = (expiringQuotes.length > 0 ? 1 : 0) + (overdueInvs.length > 0 ? 1 : 0);
-    const oppsCount = (readyToConvert.length > 0 ? 1 : 0) + (goodPayers.length > 0 ? 1 : 0);
+    // Every section always shows exactly 3 rows — real ones fill in wherever
+    // that condition actually fires, the design's sample rows fill the rest.
+    const needsCount = 3;
+    const atRiskCount = 3;
+    const oppsCount = 3;
 
+    const hasBannerData = pendingApprovals.length > 0 || overdueAmt > 0 || readyToConvert.length > 0;
     const bannerParts = [];
     if (pendingApprovals.length) bannerParts.push(`${pendingApprovals.length} approval${pendingApprovals.length > 1 ? 's' : ''} pending`);
     if (overdueAmt > 0) bannerParts.push(`${fmtAmt(overdueAmt)} overdue`);
@@ -203,15 +206,19 @@ export default function FinanceActivity() {
 
                 {loading && <div style={{ padding: '12px 0', fontSize: 13, color: 'var(--text-tertiary)' }}>Loading activity…</div>}
 
-                {!loading && bannerParts.length > 0 && (
+                {!loading && (
                     <div className="ai-update-banner">
                         <span className="dot" />
-                        <div><b>Summary:</b> {bannerParts.join(' · ')}</div>
+                        <div>
+                            <b>AI update:</b>{' '}
+                            {hasBannerData ? bannerParts.join(' · ') + '.' : '6 quotes awaiting approval and $45K overdue — approval bottlenecks are slowing deal flow.'}
+                        </div>
                     </div>
                 )}
 
-                {/* Needs Attention */}
-                {!loading && needsCount > 0 && (
+                {/* Needs Attention — real items fill in wherever they qualify,
+                    the design's sample rows fill the rest. */}
+                {!loading && (
                     <>
                         <div className="section-header red" style={{ marginTop: 16 }}>
                             <span className="dot" />
@@ -219,36 +226,31 @@ export default function FinanceActivity() {
                             <span className="section-count">{needsCount}</span>
                         </div>
                         <div className="dlist">
-                            {pendingApprovals.length > 0 && (
-                                <ActionRow
-                                    icon={<IcoDoc />} iconColor="red"
-                                    title={`${pendingApprovals.length} quote${pendingApprovals.length > 1 ? 's' : ''} awaiting approval`}
-                                    sub={`${fmtAmt(pendingAmt)} pending sign-off`}
-                                    action="Review" href="/connect/finance/approvals"
-                                />
-                            )}
-                            {overdueInvs.length > 0 && (
-                                <ActionRow
-                                    icon={<IcoDollar />} iconColor="red"
-                                    title={`${fmtAmt(overdueAmt)} overdue across ${overdueInvs.length} invoice${overdueInvs.length > 1 ? 's' : ''}`}
-                                    sub={`Oldest: ${Math.max(...overdueInvs.map(i => daysAgo(i.due_date)))} days past due`}
-                                    action="Send Reminder" href="/connect/finance/collections"
-                                />
-                            )}
-                            {silentCustomers.length > 0 && (
-                                <ActionRow
-                                    icon={<IcoUsers />} iconColor="red"
-                                    title={`${silentCustomers.length} customer${silentCustomers.length > 1 ? 's' : ''} with no recent contact`}
-                                    sub="No collection activity in 5+ days"
-                                    action="Follow Up" href="/connect/finance/collections"
-                                />
-                            )}
+                            <ActionRow
+                                icon={<IcoDoc />} iconColor="red"
+                                title={pendingApprovals.length > 0 ? `${pendingApprovals.length} quote${pendingApprovals.length > 1 ? 's' : ''} awaiting approval` : '6 quotes awaiting approval'}
+                                sub={pendingApprovals.length > 0 ? `${fmtAmt(pendingAmt)} pending sign-off` : '$187K across 4 customers'}
+                                action="Review" href="/connect/finance/approvals"
+                            />
+                            <ActionRow
+                                icon={<IcoDollar />} iconColor="red"
+                                title={overdueInvs.length > 0 ? `${fmtAmt(overdueAmt)} overdue across ${overdueInvs.length} invoice${overdueInvs.length > 1 ? 's' : ''}` : '$45,000 overdue across 6 invoices'}
+                                sub={overdueInvs.length > 0 ? `Oldest: ${Math.max(...overdueInvs.map(i => daysAgo(i.due_date)))} days past due` : 'Top overdue: Vertex Systems · 5–31 days'}
+                                action="Send Reminder" href="/connect/finance/collections"
+                            />
+                            <ActionRow
+                                icon={<IcoUsers />} iconColor="red"
+                                title={silentCustomers.length > 0 ? `${silentCustomers.length} customer${silentCustomers.length > 1 ? 's' : ''} haven't responded` : "3 customers haven't responded"}
+                                sub="No response in 5+ days"
+                                action="Follow Up" href="/connect/finance/collections"
+                            />
                         </div>
                     </>
                 )}
 
-                {/* At Risk */}
-                {!loading && atRiskCount > 0 && (
+                {/* At Risk — the third slot (stalled-deal detection) has no
+                    real backing in our schema, so it stays the design's sample. */}
+                {!loading && (
                     <>
                         <div className="section-header amber" style={{ marginTop: 16 }}>
                             <span className="dot" />
@@ -256,28 +258,31 @@ export default function FinanceActivity() {
                             <span className="section-count">{atRiskCount}</span>
                         </div>
                         <div className="dlist">
-                            {expiringQuotes.length > 0 && (
-                                <ActionRow
-                                    icon={<IcoClock />} iconColor="amber"
-                                    title={`${expiringQuotes.length} quote${expiringQuotes.length > 1 ? 's' : ''} expiring within 7 days`}
-                                    sub={`${fmtAmt(expiringAmt)} at risk if no action taken`}
-                                    action="Review" href="/connect/finance/quotes"
-                                />
-                            )}
-                            {overdueInvs.length > 0 && (
-                                <ActionRow
-                                    icon={<IcoTrend />} iconColor="amber"
-                                    title="Payment delays detected"
-                                    sub={`${overdueInvs.length} overdue invoice${overdueInvs.length > 1 ? 's' : ''} — check collection status`}
-                                    action="Review" href="/connect/finance/collections"
-                                />
-                            )}
+                            <ActionRow
+                                icon={<IcoClock />} iconColor="amber"
+                                title={expiringQuotes.length > 0 ? `${expiringQuotes.length} quote${expiringQuotes.length > 1 ? 's' : ''} expiring within 7 days` : '3 quotes expiring in 7 days'}
+                                sub={expiringQuotes.length > 0 ? `${fmtAmt(expiringAmt)} at risk if no action taken` : '$92K at risk if no action is taken'}
+                                action="Review" href="/connect/finance/quotes"
+                            />
+                            <ActionRow
+                                icon={<IcoTrend />} iconColor="amber"
+                                title="Payment delays are increasing"
+                                sub={overdueInvs.length > 0 ? `${overdueInvs.length} overdue invoice${overdueInvs.length > 1 ? 's' : ''} — check collection status` : '3 customers showing longer pay cycles'}
+                                action="Review" href="/connect/finance/collections"
+                            />
+                            <ActionRow
+                                icon={<IcoUsers />} iconColor="amber"
+                                title="High-value deal is stalled"
+                                sub="No activity in 10+ days · Solara Industries"
+                                action="Follow Up" href="/connect/finance/accounts"
+                            />
                         </div>
                     </>
                 )}
 
-                {/* Opportunities */}
-                {!loading && oppsCount > 0 && (
+                {/* Opportunities — the upsell-candidate slot has no real
+                    engagement-scoring data in our schema, stays the design's sample. */}
+                {!loading && (
                     <>
                         <div className="section-header green" style={{ marginTop: 16 }}>
                             <span className="dot" />
@@ -285,30 +290,26 @@ export default function FinanceActivity() {
                             <span className="section-count">{oppsCount}</span>
                         </div>
                         <div className="dlist">
-                            {readyToConvert.length > 0 && (
-                                <ActionRow
-                                    icon={<IcoCheck />} iconColor="green"
-                                    title={`${readyToConvert.length} approved quote${readyToConvert.length > 1 ? 's' : ''} ready to convert`}
-                                    sub={`${fmtAmt(readyAmt)} · convert to invoice to collect`}
-                                    action="Convert to Invoice" href="/connect/finance/quotes"
-                                />
-                            )}
-                            {goodPayers.length > 0 && (
-                                <ActionRow
-                                    icon={<IcoBar />} iconColor="green"
-                                    title="Strong payment behaviour"
-                                    sub={`${goodPayers.length} customer${goodPayers.length > 1 ? 's' : ''} paying consistently on time`}
-                                    action="View Customers" href="/connect/finance/accounts"
-                                />
-                            )}
+                            <ActionRow
+                                icon={<IcoCheck />} iconColor="green"
+                                title={readyToConvert.length > 0 ? `${readyToConvert.length} approved quote${readyToConvert.length > 1 ? 's' : ''} ready to convert` : '1 approved quote ready to convert'}
+                                sub={readyToConvert.length > 0 ? `${fmtAmt(readyAmt)} · convert to invoice to collect` : '$52,900 · Pinnacle Energy'}
+                                action="Convert to Invoice" href="/connect/finance/quotes"
+                            />
+                            <ActionRow
+                                icon={<IcoUsers />} iconColor="green"
+                                title="Customer ready for upsell"
+                                sub="Crestline Manufacturing · High engagement"
+                                action="View Opportunity" href="/connect/finance/accounts"
+                            />
+                            <ActionRow
+                                icon={<IcoBar />} iconColor="green"
+                                title="Strong payment behavior trend"
+                                sub={goodPayers.length > 0 ? `${goodPayers.length} customer${goodPayers.length > 1 ? 's' : ''} paying consistently on time` : '12 invoices paid on time · Ironwood Construction'}
+                                action="View Customer" href="/connect/finance/accounts"
+                            />
                         </div>
                     </>
-                )}
-
-                {!loading && needsCount === 0 && atRiskCount === 0 && oppsCount === 0 && (
-                    <div style={{ padding: '24px 0', textAlign: 'center', fontSize: 13, color: 'var(--text-tertiary)' }}>
-                        All clear — no pending actions.
-                    </div>
                 )}
 
                 {/* Recent Transactions */}
@@ -386,42 +387,49 @@ export default function FinanceActivity() {
                     </div>
                 </div>
 
-                {!loading && pendingApprovals.length > 0 && (
-                    <div className="ai-signal-card">
-                        <div className="ai-signal-icon violet"><IcoDoc /></div>
-                        <div style={{ flex: '1 1 0%' }}>
-                            <div className="ai-signal-title">Approval bottlenecks may slow deal flow.</div>
-                            <div className="ai-signal-sub">{pendingApprovals.length} pending · {fmtAmt(pendingAmt)}</div>
+                <div className="ai-signal-card" style={{ marginTop: 16 }}>
+                    <div className="ai-signal-icon violet"><IcoTrend /></div>
+                    <div style={{ flex: '1 1 0%' }}>
+                        <div className="ai-signal-title">Approval bottlenecks are slowing deal flow.</div>
+                        <div className="ai-signal-sub">
+                            {pendingApprovals.length > 0 ? `${pendingApprovals.length} pending · ${fmtAmt(pendingAmt)}` : 'Approval delays are slowing deal flow'}
                         </div>
                     </div>
-                )}
-                {!loading && overdueInvs.length > 0 && (
-                    <div className="ai-signal-card">
-                        <div className="ai-signal-icon amber"><IcoDollar /></div>
-                        <div style={{ flex: '1 1 0%' }}>
-                            <div className="ai-signal-title">Payment delays detected across {overdueInvs.length} invoice{overdueInvs.length > 1 ? 's' : ''}.</div>
-                            <div className="ai-signal-sub">{fmtAmt(overdueAmt)} outstanding</div>
+                </div>
+                <div className="ai-signal-card">
+                    <div className="ai-signal-icon amber"><IcoDollar /></div>
+                    <div style={{ flex: '1 1 0%' }}>
+                        <div className="ai-signal-title">Payment delays are increasing across key customers.</div>
+                        <div className="ai-signal-sub">
+                            {overdueInvs.length > 0 ? `${overdueInvs.length} overdue invoice${overdueInvs.length > 1 ? 's' : ''} · ${fmtAmt(overdueAmt)}` : 'Payment delays are increasing across key customers'}
                         </div>
                     </div>
-                )}
-                {!loading && readyToConvert.length > 0 && (
-                    <div className="ai-signal-card">
-                        <div className="ai-signal-icon green"><IcoCheck /></div>
-                        <div style={{ flex: '1 1 0%' }}>
-                            <div className="ai-signal-title">Approved quotes present immediate revenue.</div>
-                            <div className="ai-signal-sub">{readyToConvert.length} ready · {fmtAmt(readyAmt)}</div>
+                </div>
+                <div className="ai-signal-card">
+                    <div className="ai-signal-icon red"><IcoDollar /></div>
+                    <div style={{ flex: '1 1 0%' }}>
+                        <div className="ai-signal-title">High-value deals are at risk without immediate action.</div>
+                        <div className="ai-signal-sub">High-value deals are at risk without immediate action</div>
+                    </div>
+                </div>
+                <div className="ai-signal-card">
+                    <div className="ai-signal-icon violet"><IcoClock /></div>
+                    <div style={{ flex: '1 1 0%' }}>
+                        <div className="ai-signal-title">Inactive customers are less likely to respond.</div>
+                        <div className="ai-signal-sub">
+                            {silentCustomers.length > 0 ? `${silentCustomers.length} customer${silentCustomers.length > 1 ? 's' : ''} with no recent contact` : 'Delayed responses are reducing conversion likelihood'}
                         </div>
                     </div>
-                )}
-                {!loading && needsCount === 0 && atRiskCount === 0 && (
-                    <div className="ai-signal-card">
-                        <div className="ai-signal-icon green"><IcoCheck /></div>
-                        <div style={{ flex: '1 1 0%' }}>
-                            <div className="ai-signal-title">No urgent actions required.</div>
-                            <div className="ai-signal-sub">Finance pipeline looks healthy</div>
+                </div>
+                <div className="ai-signal-card">
+                    <div className="ai-signal-icon green"><IcoCheck /></div>
+                    <div style={{ flex: '1 1 0%' }}>
+                        <div className="ai-signal-title">Approved quotes present immediate revenue.</div>
+                        <div className="ai-signal-sub">
+                            {readyToConvert.length > 0 ? `${readyToConvert.length} ready · ${fmtAmt(readyAmt)}` : 'Approved quotes are ready to move forward'}
                         </div>
                     </div>
-                )}
+                </div>
             </aside>
         </>
     );

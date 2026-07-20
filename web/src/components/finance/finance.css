@@ -664,6 +664,7 @@ input, textarea { font-family: inherit; }
   font-size: 13px;
   color: var(--text-secondary);
   margin-top: 18px;
+  margin-bottom: 16px;
 }
 .ai-update-banner .dot {
   width: 6px; height: 6px; border-radius: 50%;
