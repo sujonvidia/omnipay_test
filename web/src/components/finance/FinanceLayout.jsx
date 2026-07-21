@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { LuSparkles, LuHistory, LuMenu } from 'react-icons/lu'
+import { LuHistory, LuMenu, LuChevronRight, LuSearch } from 'react-icons/lu'
 import { FiBell, FiHelpCircle } from 'react-icons/fi'
 import CardProfileModal from './CardProfileModal'
 import SettingsMenu from './SettingsMenu'
@@ -79,9 +79,18 @@ export default function FinanceLayout() {
                 >
                     <LuMenu size={18} />
                 </button>
-                <div className='topbar-brand flex items-center gap-2 font-semibold'>
-                    <LuSparkles size={16} className='text-[var(--primary)]' />
-                    <span>Northstar Industrial</span>
+                <button type='button' className='company-switch' title='Switch company'>
+                    <span className='company-dot' style={{ background: 'var(--primary)' }}>N</span>
+                    <span style={{ fontWeight: 600 }}>Northstar Industrial</span>
+                    <span style={{ color: 'var(--text-tertiary)', display: 'flex' }}>
+                        <LuChevronRight size={14} />
+                    </span>
+                </button>
+                <div className='gs-wrap'>
+                    <div className='gs-box'>
+                        <LuSearch size={14} />
+                        <input placeholder='Search customers, invoices, quotes, settings…' />
+                    </div>
                 </div>
                 <div className='topbar-spacer flex-1' />
                 <div className='relative'>

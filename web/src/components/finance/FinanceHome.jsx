@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import { LuPlus, LuChevronRight, LuFileText, LuReceipt, LuUserPlus } from 'react-icons/lu';
 
 const BASE = import.meta.env.VITE_BASE_URL || '';
 const authH = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
@@ -145,6 +146,48 @@ function homeResponder(query, navigate) {
         text: 'I can summarize what needs attention today, walk through overdue invoices, or surface urgent approvals. Try one of the suggestions below.',
         followUps: ['What needs my attention today?', 'Show overdue invoices', "Summarize today's risk"],
     };
+}
+
+function CreateMenu({ navigate }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef(null);
+
+    useEffect(() => {
+        const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+        const onKeyDown = (e) => { if (e.key === 'Escape') setOpen(false); };
+        document.addEventListener('mousedown', onDocClick);
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', onDocClick);
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, []);
+
+    const go = (path) => { setOpen(false); navigate(path); };
+
+    return (
+        <div className="create-menu" ref={ref}>
+            <button type="button" className="create-btn" onClick={() => setOpen(v => !v)}>
+                <LuPlus size={15} /> Create
+                <span style={{ display: 'inline-flex', transform: 'rotate(90deg)' }}>
+                    <LuChevronRight size={12} />
+                </span>
+            </button>
+            {open && (
+                <div className="create-dropdown">
+                    <button type="button" className="create-dropdown-item" onClick={() => go('/connect/finance/quotes')}>
+                        <LuFileText size={15} /> New quote
+                    </button>
+                    <button type="button" className="create-dropdown-item" onClick={() => go('/connect/finance/collections')}>
+                        <LuReceipt size={15} /> New invoice
+                    </button>
+                    <button type="button" className="create-dropdown-item" onClick={() => go('/connect/finance/accounts')}>
+                        <LuUserPlus size={15} /> New customer
+                    </button>
+                </div>
+            )}
+        </div>
+    );
 }
 
 function greeting() {
@@ -302,6 +345,10 @@ export default function FinanceHome() {
     return (
         <>
             <main className="page-main">
+                <div className="page-actions">
+                    <CreateMenu navigate={navigate} />
+                </div>
+
                 <div className="hero">
                     <div className="hero-icon"><SparkleIcon size={22} /></div>
                     <h1 className="hero-title">{greeting()}, {user?.firstname || 'there'}</h1>
