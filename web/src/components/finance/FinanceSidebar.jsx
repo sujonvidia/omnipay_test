@@ -16,7 +16,7 @@ import {
 
 const FINANCE_MENU_ITEMS = [
     { path: 'home', title: 'Home', icon: LuLayoutDashboard },
-    { path: 'accounts', title: 'Accounts', icon: LuBriefcase },
+    { path: 'accounts', title: 'Customers', icon: LuBriefcase },
     { path: 'quotes', title: 'Quotes', icon: LuFileText },
     { path: 'receivables', title: 'Receivables', icon: LuHandCoins },
     { path: 'approvals', title: 'Approvals', icon: LuBadgeCheck },

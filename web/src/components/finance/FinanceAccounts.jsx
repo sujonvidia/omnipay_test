@@ -1,4 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import CreateMenu from './CreateMenu';
+import DocEditor from './DocEditor';
+import CreateCustomerModal from './CreateCustomerModal';
 
 const BASE = import.meta.env.VITE_BASE_URL || '';
 const authH = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
@@ -57,13 +61,40 @@ const SparkleIcon = ({ size = 22 }) => (
     </svg>
 );
 
-const RISK_COLOR = { low: 'var(--green-text)', medium: 'var(--amber-text)', high: 'var(--red-text)' };
-const RISK_BG   = { low: 'var(--green-bg)',   medium: 'var(--amber-bg)',   high: 'var(--red-bg)'   };
+// Placeholder portfolio table — real per-customer invoice/YTD/outstanding
+// rollups aren't computed yet; swap for real data once that's wired up.
+const MOCK_CUSTOMERS = [
+    { name: 'Crestline Manufacturing', type: 'Manufacturing', avatar: '#8B5CF6', since: 'Jan 2020', invoices: 42, ytd: 450000, outstanding: 28400, overdue: 0, status: { label: 'High value', tone: 'violet' } },
+    { name: 'Solara Industries', type: 'Industrial', avatar: '#3B82F6', since: 'Apr 2021', invoices: 28, ytd: 320000, outstanding: 18500, overdue: 0, status: { label: 'High value', tone: 'violet' } },
+    { name: 'Westbridge Capital', type: 'Financial Services', avatar: '#7C3AED', since: 'Nov 2020', invoices: 22, ytd: 290000, outstanding: 0, overdue: 0, status: { label: 'High value', tone: 'violet' } },
+    { name: 'Vertex Systems', type: 'Industrial Equipment & Services', avatar: '#1F2937', since: 'Jan 2023', invoices: 24, ytd: 132500, outstanding: 27250, overdue: 18245, status: { label: 'Needs attention', tone: 'red' } },
+    { name: 'Meridian Industrial', type: 'Manufacturing & Engineering', avatar: '#F59E0B', since: 'Mar 2021', invoices: 18, ytd: 98400, outstanding: 24850, overdue: 12450, status: { label: 'Needs attention', tone: 'red' } },
+    { name: 'Ironwood Construction', type: 'Construction', avatar: '#06B6D4', since: 'Jun 2023', invoices: 12, ytd: 98000, outstanding: 18200, overdue: 0, status: { label: 'Stable', tone: 'green' } },
+    { name: 'Pinnacle Energy', type: 'Energy', avatar: '#10B981', since: 'May 2022', invoices: 14, ytd: 88200, outstanding: 52900, overdue: 0, status: { label: 'Stable', tone: 'green' } },
+    { name: 'BluePeak Logistics', type: 'Logistics', avatar: '#EF4444', since: 'Aug 2022', invoices: 9, ytd: 64200, outstanding: 8700, overdue: 3700, status: { label: 'Needs attention', tone: 'red' } },
+    { name: 'Summit Solutions', type: 'Technology', avatar: '#3B82F6', since: 'Sep 2023', invoices: 8, ytd: 54000, outstanding: 8900, overdue: 0, status: { label: 'Stable', tone: 'green' } },
+    { name: 'TechCore Industries', type: 'Technology', avatar: '#0EA5E9', since: 'Feb 2023', invoices: 6, ytd: 48000, outstanding: 18200, overdue: 0, status: { label: 'Stable', tone: 'green' } },
+    { name: 'Apex Utilities', type: 'Utilities', avatar: '#6B7280', since: 'Feb 2024', invoices: 7, ytd: 41200, outstanding: 12000, overdue: 0, status: { label: 'Needs attention', tone: 'red' } },
+    { name: 'Nova Corp', type: 'Energy', avatar: '#1F2937', since: 'Jul 2023', invoices: 5, ytd: 36000, outstanding: 6800, overdue: 0, status: { label: 'Stable', tone: 'green' } },
+    { name: 'Pacific Solutions', type: 'Solutions', avatar: '#10B981', since: 'Oct 2022', invoices: 4, ytd: 28000, outstanding: 4200, overdue: 0, status: { label: 'Stable', tone: 'green' } },
+    { name: 'Cascade Solutions', type: 'Renewables', avatar: '#8B5CF6', since: 'Feb 2024', invoices: 3, ytd: 24000, outstanding: 8900, overdue: 0, status: { label: 'Stable', tone: 'green' } },
+    { name: 'Northfield Schools', type: 'Education', avatar: '#1F2937', since: 'Mar 2024', invoices: 2, ytd: 22000, outstanding: 0, overdue: 0, status: { label: 'Stable', tone: 'green' } },
+    { name: 'Harbor Group', type: 'Logistics', avatar: '#A855F7', since: 'Jan 2026', invoices: 1, ytd: 4300, outstanding: 4300, overdue: 0, status: { label: 'Stable', tone: 'green' } },
+];
+
+const fmtMoney2 = (n) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const AiGoArrow = () => (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="5" y1="12" x2="19" y2="12" />
+        <polyline points="12 5 19 12 12 19" />
+    </svg>
+);
 
 const chips = [
     {
         title: 'Which customers need attention?',
-        cat: 'Accounts',
+        cat: 'Customers',
         icon: (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
@@ -81,7 +112,7 @@ const chips = [
         ),
     },
     {
-        title: 'Which accounts have overdue invoices?',
+        title: 'Which customers have overdue invoices?',
         cat: 'Payments',
         icon: (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -102,60 +133,6 @@ const chips = [
     },
 ];
 
-function CustomerRow({ c }) {
-    const initials = c.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border-subtle, var(--border))' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--bg-subtle)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)', flexShrink: 0 }}>
-                {initials}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{c.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                    {c.email || '—'}{c.payment_terms ? ` · ${c.payment_terms}` : ''}
-                    {c.phone ? ` · ${c.phone}` : ''}
-                </div>
-            </div>
-            <span style={{
-                fontSize: 11, fontWeight: 600, flexShrink: 0,
-                color: c.cardpointe_profile_id ? 'var(--green-text)' : 'var(--text-meta)',
-                background: c.cardpointe_profile_id ? 'var(--green-bg)' : 'var(--bg-subtle)',
-                borderRadius: 99, padding: '2px 8px',
-            }}>
-                {c.cardpointe_profile_id ? 'card on file' : 'no card'}
-            </span>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                {c.credit_limit > 0 && (
-                    <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 3 }}>
-                        ${c.credit_limit.toLocaleString()} limit
-                    </div>
-                )}
-                <span style={{
-                    fontSize: 11, fontWeight: 600,
-                    color: RISK_COLOR[c.risk_level] || 'var(--text-tertiary)',
-                    background: RISK_BG[c.risk_level] || 'var(--bg-subtle)',
-                    borderRadius: 99, padding: '2px 8px',
-                }}>
-                    {c.risk_level || 'low'} risk
-                </span>
-            </div>
-        </div>
-    );
-}
-
-function CustomerSection({ tone, label, items }) {
-    if (!items.length) return null;
-    const colors = { red: 'var(--red-text)', amber: 'var(--amber-text)', green: 'var(--green-text)' };
-    return (
-        <div style={{ marginTop: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: colors[tone] || 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>
-                {label} · {items.length}
-            </div>
-            {items.map(c => <CustomerRow key={c._id} c={c} />)}
-        </div>
-    );
-}
-
 const inputStyle = {
     width: '100%', padding: '7px 10px', borderRadius: 8,
     border: '1px solid var(--border-primary)', background: 'var(--bg-input, var(--bg-subtle))',
@@ -164,13 +141,14 @@ const inputStyle = {
 const labelStyle = { fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 3, display: 'block' };
 
 export default function FinanceAccounts() {
+    const navigate = useNavigate();
     const { customers, loading, error, reload } = useCustomers();
     const { txns, txnsLoading } = useTransactions();
     const { invoices, quotes: acctQuotes } = useAccountSignals();
-    const [showForm, setShowForm] = useState(false);
-    const [creating, setCreating] = useState(false);
-    const [createError, setCreateError] = useState('');
-    const [form, setForm] = useState({ name: '', email: '', phone: '', payment_terms: 'net30', credit_limit: '', account: '', expiry: '' });
+    const [tabState, setTabState] = useState(1);
+    const [createFlow, setCreateFlow] = useState(null); // 'invoice' | 'quote' | 'customer' | null
+    const [custSearch, setCustSearch] = useState('');
+    const [custSort, setCustSort] = useState({ key: 'ytd', dir: 'desc' });
 
     const [showImport, setShowImport] = useState(false);
     const [importing, setImporting] = useState(false);
@@ -266,43 +244,44 @@ export default function FinanceAccounts() {
     const utilCustomers = customers.filter(c => c.credit_limit > 0).map(c => ({ ...c, util: (c.credit_used || 0) / c.credit_limit })).sort((a, b) => b.util - a.util);
     const worstUtil = utilCustomers[0];
 
-    const high_risk = customers.filter(c => c.risk_level === 'high');
-    const med_risk  = customers.filter(c => c.risk_level === 'medium');
-    const low_risk  = customers.filter(c => c.risk_level !== 'high' && c.risk_level !== 'medium');
+    // ── Stable / High Value — real signals for customers NOT already
+    // flagged in Needs Attention, falling back to the design's mock rows
+    // when there isn't enough real portfolio data yet. ──
+    const troubledIds = new Set(
+        [bestOverdueRisk, bestInactive, bestPaymentRisk, bestQuotesPending]
+            .filter(Boolean)
+            .map(s => String(s.customer._id))
+    );
+    const untroubled = custSignals.filter(s => !troubledIds.has(String(s.customer._id)) && s.invoiceCount > 0);
 
-    async function createCustomer(e) {
-        e.preventDefault();
-        if (!form.name.trim()) return setCreateError('Name required');
-        setCreating(true); setCreateError('');
-        try {
-            const r = await fetch(`${BASE}/v1/finance/customers`, {
-                method: 'POST',
-                headers: { ...authH(), 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                    name: form.name.trim(),
-                    email: form.email.trim() || undefined,
-                    phone: form.phone.trim() || undefined,
-                    payment_terms: form.payment_terms,
-                    credit_limit: parseFloat(form.credit_limit) || 0,
-                    account: form.account.trim() || undefined,
-                    expiry: form.expiry.trim() || undefined,
-                }),
-            });
-            const j = await r.json();
-            if (!j.status) throw new Error(j.error || 'Create failed');
-            if (form.account && !j.data.cardpointe_profile_id) {
-                setCreateError(j.cardpointe_profile?.resptext || 'Customer created, but card could not be saved — check the card token/expiry.');
-            }
-            setShowForm(false);
-            setForm({ name: '', email: '', phone: '', payment_terms: 'net30', credit_limit: '', account: '', expiry: '' });
-            reload();
-        } catch (err) {
-            setCreateError(err.message);
-        } finally {
-            setCreating(false);
-        }
-    }
+    const stableReal = untroubled
+        .slice()
+        .sort((a, b) => (a.daysSinceActivity ?? 999) - (b.daysSinceActivity ?? 999))
+        .slice(0, 4)
+        .map(s => {
+            const sub = s.daysSinceActivity != null && s.daysSinceActivity <= 10
+                ? `Active customer · last invoice paid ${s.daysSinceActivity} day${s.daysSinceActivity === 1 ? '' : 's'} ago — healthy`
+                : `${s.invoiceCount} invoice${s.invoiceCount === 1 ? '' : 's'} · ${fmtKAcct(s.ytdTotal)} YTD · no overdue — low risk`;
+            return { name: s.customer.name, sub };
+        });
+    const stable = stableReal.length > 0 ? stableReal : [
+        { name: 'Pinnacle Energy', sub: 'Strong payment history · on track — low risk' },
+        { name: 'Ironwood Construction', sub: '12 invoices paid on time · $98K YTD — performing well' },
+        { name: 'Summit Solutions', sub: 'Active customer · last invoice paid 6 days ago — healthy' },
+        { name: 'Northfield Schools', sub: '2 invoices · $22K YTD · no overdue — low risk' },
+    ];
+
+    const HIGH_VALUE_TAGS = ['top customer by revenue — strategic customer', 'high potential — monitor closely', 'long-term customer — strong relationship'];
+    const highValueReal = untroubled
+        .filter(s => s.ytdTotal > 0)
+        .sort((a, b) => b.ytdTotal - a.ytdTotal)
+        .slice(0, 3)
+        .map((s, i) => ({ name: s.customer.name, sub: `${fmtKAcct(s.ytdTotal)} YTD · ${HIGH_VALUE_TAGS[i] || HIGH_VALUE_TAGS[HIGH_VALUE_TAGS.length - 1]}` }));
+    const highValue = highValueReal.length > 0 ? highValueReal : [
+        { name: 'Crestline Manufacturing', sub: '$450K YTD · top 5% by revenue — strategic customer' },
+        { name: 'Solara Industries', sub: '$320K YTD · growing · high potential — monitor closely' },
+        { name: 'Westbridge Capital', sub: '$290K YTD · long-term customer — strong relationship' },
+    ];
 
     async function importProfile(e) {
         e.preventDefault();
@@ -333,13 +312,29 @@ export default function FinanceAccounts() {
         }
     }
 
+    const custSortToggle = (key) => setCustSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' });
+    const filteredMockCustomers = MOCK_CUSTOMERS
+        .filter(c => c.name.toLowerCase().includes(custSearch.trim().toLowerCase()))
+        .slice()
+        .sort((a, b) => {
+            const { key, dir } = custSort;
+            const av = key === 'name' ? a.name.toLowerCase() : a[key];
+            const bv = key === 'name' ? b.name.toLowerCase() : b[key];
+            const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+            return dir === 'asc' ? cmp : -cmp;
+        });
+
     return (
         <>
             <main className="page-main">
+                <div className="page-actions">
+                    <CreateMenu onPick={setCreateFlow} />
+                </div>
+
                 <div className="hero">
                     <div className="hero-icon"><SparkleIcon size={22} /></div>
-                    <h1 className="hero-title">Accounts</h1>
-                    <p className="hero-sub">Your customer portfolio and account intelligence</p>
+                    <h1 className="hero-title">Customers</h1>
+                    <p className="hero-sub">Your customer portfolio and customer intelligence</p>
                 </div>
 
                 <div className="aibar">
@@ -377,156 +372,197 @@ export default function FinanceAccounts() {
                 </div>
 
                 {!loading && (
-                    <div>
-                        <div className="section-header red">
-                            <span className="dot" />
-                            <span className="section-title">Needs Attention</span>
-                            <span className="section-count">{needsAttention.length}</span>
-                        </div>
-                        <div>
-                            {needsAttention.map((item, i) => (
-                                <div className="entity-row" key={item.name + i}>
-                                    <div className="avatar" style={{ background: riskAvatarColors[i % riskAvatarColors.length] }}>
-                                        {item.name.charAt(0).toUpperCase()}
-                                    </div>
-                                    <div className="row-body">
-                                        <div className="row-title">{item.name}</div>
-                                        <div className="row-sub">{item.sub}</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {!loading && high_risk.length > 0 && (
                     <div className="ai-update-banner">
                         <span className="dot" />
-                        <div>{high_risk.length} account{high_risk.length === 1 ? '' : 's'} need attention based on recent activity.</div>
+                        <div>{needsAttention.length} customers need attention based on recent activity.</div>
                     </div>
                 )}
 
-                <div style={{ margin: '12px 0', display: 'flex', gap: 8 }}>
-                    <button
-                        className="btn btn-primary btn-sm"
-                        onClick={() => { setShowForm(v => !v); setShowImport(false); setCreateError(''); }}
-                        style={{ fontSize: 13 }}
-                    >
-                        {showForm ? 'Cancel' : '+ Add Customer'}
-                    </button>
-                    <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => { setShowImport(v => !v); setShowForm(false); setImportError(''); }}
-                        style={{ fontSize: 13 }}
-                    >
-                        {showImport ? 'Cancel' : 'Link Existing Profile'}
-                    </button>
+                <div className="tabs" style={{ margin: '20px 0 4px' }}>
+                    <div className={`tab ${tabState === 1 ? 'active' : ''}`} onClick={() => setTabState(1)}>Overview</div>
+                    <div className={`tab ${tabState === 2 ? 'active' : ''}`} onClick={() => setTabState(2)}>
+                        All Customers <span className="text-meta" style={{ fontWeight: 400 }}>· {MOCK_CUSTOMERS.length}</span>
+                    </div>
                 </div>
-
-                {showImport && (
-                    <form onSubmit={importProfile} style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                            Pulls an existing CardPointe profile/account (visible in the CardPointe portal contact URL: <code>.../contactdetail/&lt;profileid&gt;/&lt;acctid&gt;</code>) into a customer record here — no new card token needed.
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                            <div>
-                                <label style={labelStyle}>Profile ID *</label>
-                                <input style={inputStyle} value={importForm.profileid} onChange={e => setImportForm(f => ({ ...f, profileid: e.target.value }))} placeholder="13840143476606191591" required />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Account ID *</label>
-                                <input style={inputStyle} value={importForm.acctid} onChange={e => setImportForm(f => ({ ...f, acctid: e.target.value }))} placeholder="1" required />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Name override (optional)</label>
-                                <input style={inputStyle} value={importForm.name} onChange={e => setImportForm(f => ({ ...f, name: e.target.value }))} placeholder="Uses CardPointe's name if blank" />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Payment Terms</label>
-                                <select style={inputStyle} value={importForm.payment_terms} onChange={e => setImportForm(f => ({ ...f, payment_terms: e.target.value }))}>
-                                    <option value="due_on_receipt">Due on Receipt</option>
-                                    <option value="net15">Net 15</option>
-                                    <option value="net30">Net 30</option>
-                                    <option value="net45">Net 45</option>
-                                    <option value="net60">Net 60</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Credit Limit ($)</label>
-                                <input style={inputStyle} value={importForm.credit_limit} onChange={e => setImportForm(f => ({ ...f, credit_limit: e.target.value }))} placeholder="10000" type="number" min="0" />
-                            </div>
-                        </div>
-                        {importError && (
-                            <div style={{ fontSize: 12, color: 'var(--red-text)', background: 'var(--red-bg)', borderRadius: 6, padding: '6px 8px' }}>{importError}</div>
-                        )}
-                        <button className="btn btn-primary btn-sm" type="submit" disabled={importing} style={{ alignSelf: 'flex-start', fontSize: 13 }}>
-                            {importing ? 'Importing…' : 'Import Customer'}
-                        </button>
-                    </form>
-                )}
-
-                {showForm && (
-                    <form onSubmit={createCustomer} style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                            <div>
-                                <label style={labelStyle}>Name *</label>
-                                <input style={inputStyle} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Acme Corp" required />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Email</label>
-                                <input style={inputStyle} value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="billing@acme.com" type="email" />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Phone</label>
-                                <input style={inputStyle} value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 000 0000" />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Payment Terms</label>
-                                <select style={inputStyle} value={form.payment_terms} onChange={e => setForm(f => ({ ...f, payment_terms: e.target.value }))}>
-                                    <option value="due_on_receipt">Due on Receipt</option>
-                                    <option value="net15">Net 15</option>
-                                    <option value="net30">Net 30</option>
-                                    <option value="net45">Net 45</option>
-                                    <option value="net60">Net 60</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Credit Limit ($)</label>
-                                <input style={inputStyle} value={form.credit_limit} onChange={e => setForm(f => ({ ...f, credit_limit: e.target.value }))} placeholder="10000" type="number" min="0" />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Card Token / Account</label>
-                                <input style={inputStyle} value={form.account} onChange={e => setForm(f => ({ ...f, account: e.target.value }))} placeholder="4111111111111111 (UAT test PAN)" />
-                            </div>
-                            <div>
-                                <label style={labelStyle}>Expiry (MMYY)</label>
-                                <input style={inputStyle} value={form.expiry} onChange={e => setForm(f => ({ ...f, expiry: e.target.value }))} placeholder="1228" maxLength={4} />
-                            </div>
-                        </div>
-                        <div style={{ fontSize: 11.5, color: 'var(--text-tertiary)' }}>
-                            Card is optional here, but a customer needs one on file before a quote can charge them.
-                        </div>
-                        {createError && (
-                            <div style={{ fontSize: 12, color: 'var(--red-text)', background: 'var(--red-bg)', borderRadius: 6, padding: '6px 8px' }}>{createError}</div>
-                        )}
-                        <button className="btn btn-primary btn-sm" type="submit" disabled={creating} style={{ alignSelf: 'flex-start', fontSize: 13 }}>
-                            {creating ? 'Creating…' : 'Create Customer'}
-                        </button>
-                    </form>
-                )}
 
                 {loading && <div style={{ fontSize: 13, color: 'var(--text-tertiary)', padding: '20px 0' }}>Loading customers…</div>}
                 {error && <div style={{ fontSize: 13, color: 'var(--red-text)', padding: '20px 0' }}>{error}</div>}
 
                 {!loading && customers.length === 0 && !error && (
                     <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
-                        No customers yet. Add your first customer above.
+                        No customers yet. Use <b>+ Create</b> above to add your first customer.
                     </div>
                 )}
 
-                <CustomerSection tone="red"   label="High Risk"   items={high_risk} />
-                <CustomerSection tone="amber" label="Medium Risk"  items={med_risk} />
-                <CustomerSection tone="green" label="Low Risk"     items={low_risk} />
+                {!loading && tabState === 1 && (
+                    <>
+                        <div style={{ marginTop: 4 }}>
+                            <div className="section-header red">
+                                <span className="dot" />
+                                <span className="section-title">Needs Attention</span>
+                                <span className="section-count">{needsAttention.length}</span>
+                            </div>
+                            <div>
+                                {needsAttention.map((item, i) => (
+                                    <div className="entity-row" key={item.name + i}>
+                                        <div className="avatar" style={{ background: riskAvatarColors[i % riskAvatarColors.length] }}>
+                                            {item.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="row-body">
+                                            <div className="row-title">{item.name}</div>
+                                            <div className="row-sub">{item.sub}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div style={{ marginTop: 16 }}>
+                            <div className="section-header green">
+                                <span className="dot" />
+                                <span className="section-title">Stable</span>
+                                <span className="section-count">{stable.length}</span>
+                            </div>
+                            <div>
+                                {stable.map((item, i) => (
+                                    <div className="entity-row" key={item.name + i}>
+                                        <div className="avatar" style={{ background: riskAvatarColors[(i + 1) % riskAvatarColors.length] }}>
+                                            {item.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="row-body">
+                                            <div className="row-title">{item.name}</div>
+                                            <div className="row-sub">{item.sub}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div style={{ marginTop: 16 }}>
+                            <div className="section-header violet">
+                                <span className="dot" />
+                                <span className="section-title">High Value</span>
+                                <span className="section-count">{highValue.length}</span>
+                            </div>
+                            <div>
+                                {highValue.map((item, i) => (
+                                    <div className="entity-row" key={item.name + i}>
+                                        <div className="avatar" style={{ background: riskAvatarColors[(i + 2) % riskAvatarColors.length] }}>
+                                            {item.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="row-body">
+                                            <div className="row-title">{item.name}</div>
+                                            <div className="row-sub">{item.sub}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {!loading && tabState === 2 && (
+                    <>
+                        <div style={{ margin: '4px 0 12px' }}>
+                            <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => { setShowImport(v => !v); setImportError(''); }}
+                                style={{ fontSize: 13 }}
+                            >
+                                {showImport ? 'Cancel' : 'Link Existing Profile'}
+                            </button>
+                        </div>
+
+                        {showImport && (
+                            <form onSubmit={importProfile} style={{ background: 'var(--bg-subtle)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                                    Pulls an existing CardPointe profile/account (visible in the CardPointe portal contact URL: <code>.../contactdetail/&lt;profileid&gt;/&lt;acctid&gt;</code>) into a customer record here — no new card token needed.
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                    <div>
+                                        <label style={labelStyle}>Profile ID *</label>
+                                        <input style={inputStyle} value={importForm.profileid} onChange={e => setImportForm(f => ({ ...f, profileid: e.target.value }))} placeholder="13840143476606191591" required />
+                                    </div>
+                                    <div>
+                                        <label style={labelStyle}>Account ID *</label>
+                                        <input style={inputStyle} value={importForm.acctid} onChange={e => setImportForm(f => ({ ...f, acctid: e.target.value }))} placeholder="1" required />
+                                    </div>
+                                    <div>
+                                        <label style={labelStyle}>Name override (optional)</label>
+                                        <input style={inputStyle} value={importForm.name} onChange={e => setImportForm(f => ({ ...f, name: e.target.value }))} placeholder="Uses CardPointe's name if blank" />
+                                    </div>
+                                    <div>
+                                        <label style={labelStyle}>Payment Terms</label>
+                                        <select style={inputStyle} value={importForm.payment_terms} onChange={e => setImportForm(f => ({ ...f, payment_terms: e.target.value }))}>
+                                            <option value="due_on_receipt">Due on Receipt</option>
+                                            <option value="net15">Net 15</option>
+                                            <option value="net30">Net 30</option>
+                                            <option value="net45">Net 45</option>
+                                            <option value="net60">Net 60</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style={labelStyle}>Credit Limit ($)</label>
+                                        <input style={inputStyle} value={importForm.credit_limit} onChange={e => setImportForm(f => ({ ...f, credit_limit: e.target.value }))} placeholder="10000" type="number" min="0" />
+                                    </div>
+                                </div>
+                                {importError && (
+                                    <div style={{ fontSize: 12, color: 'var(--red-text)', background: 'var(--red-bg)', borderRadius: 6, padding: '6px 8px' }}>{importError}</div>
+                                )}
+                                <button className="btn btn-primary btn-sm" type="submit" disabled={importing} style={{ alignSelf: 'flex-start', fontSize: 13 }}>
+                                    {importing ? 'Importing…' : 'Import Customer'}
+                                </button>
+                            </form>
+                        )}
+
+                        <div className="flex items-center gap-3 mt-4">
+                            <input
+                                placeholder="Search customers…"
+                                value={custSearch}
+                                onChange={e => setCustSearch(e.target.value)}
+                                style={{ flex: '1 1 0%', maxWidth: 320, border: '1px solid var(--border)', borderRadius: 8, padding: '9px 12px', fontSize: 13.5 }}
+                            />
+                            <div className="text-meta" style={{ fontSize: 12.5 }}>
+                                {filteredMockCustomers.length} of {MOCK_CUSTOMERS.length} customers
+                            </div>
+                        </div>
+
+                        <div className="card mt-4 items-scroll" style={{ padding: 0 }}>
+                            <div className="cust-head">
+                                <div className="cust-sort" onClick={() => custSortToggle('name')}>Customer</div>
+                                <div>Since</div>
+                                <div className="cust-sort" style={{ textAlign: 'right' }} onClick={() => custSortToggle('invoices')}>Invoices</div>
+                                <div className="cust-sort" style={{ textAlign: 'right' }} onClick={() => custSortToggle('ytd')}>
+                                    YTD {custSort.key === 'ytd' ? (custSort.dir === 'desc' ? '↓' : '↑') : ''}
+                                </div>
+                                <div className="cust-sort" style={{ textAlign: 'right' }} onClick={() => custSortToggle('outstanding')}>Outstanding</div>
+                                <div className="cust-sort" style={{ textAlign: 'right' }} onClick={() => custSortToggle('overdue')}>Overdue</div>
+                                <div>Status</div>
+                            </div>
+                            {filteredMockCustomers.map(c => (
+                                <div className="cust-row" key={c.name}>
+                                    <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
+                                        <div className="avatar" style={{ background: c.avatar, color: '#fff', width: 30, height: 30, fontSize: 13, flexShrink: 0 }}>
+                                            {c.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ fontWeight: 600, fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                                            <div className="text-meta" style={{ fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.type}</div>
+                                        </div>
+                                    </div>
+                                    <div className="text-secondary" style={{ fontSize: 13 }}>{c.since}</div>
+                                    <div style={{ textAlign: 'right', fontSize: 13.5 }}>{c.invoices}</div>
+                                    <div style={{ textAlign: 'right', fontSize: 13.5 }}>{fmtMoney2(c.ytd)}</div>
+                                    <div style={{ textAlign: 'right', fontSize: 13.5 }}>{fmtMoney2(c.outstanding)}</div>
+                                    <div style={{ textAlign: 'right', fontSize: 13.5, color: c.overdue > 0 ? 'var(--red-text)' : 'inherit', fontWeight: c.overdue > 0 ? 600 : 400 }}>
+                                        {c.overdue > 0 ? fmtMoney2(c.overdue) : '—'}
+                                    </div>
+                                    <div><span className={`badge ${c.status.tone}`}>{c.status.label}</span></div>
+                                </div>
+                            ))}
+                        </div>
+                    </>
+                )}
             </main>
 
             <aside className="ai-panel">
@@ -560,39 +596,43 @@ export default function FinanceAccounts() {
 
                 <div className="ai-section-label">Also Noted</div>
                 <div className="ai-list">
-                    <div className="ai-list-item amber">
+                    <div className="ai-list-item amber clickable">
                         <div className="dot" />
-                        <div>
+                        <div style={{ flex: '1 1 0%' }}>
                             <div className="ai-list-item-title">{worstAvgPay ? 'Elevated average days to pay' : 'Late payment pattern worsening'}</div>
                             <div className="ai-list-item-sub">Avg {worstAvgPay ? worstAvgPay.avg_days_to_pay : 22}d</div>
                         </div>
+                        <span className="ai-go"><AiGoArrow /></span>
                     </div>
-                    <div className="ai-list-item green">
+                    <div className="ai-list-item green clickable">
                         <div className="dot" />
-                        <div>
+                        <div style={{ flex: '1 1 0%' }}>
                             <div className="ai-list-item-title">Q2 maintenance renewal likely</div>
                             <div className="ai-list-item-sub">~$6,500</div>
                         </div>
+                        <span className="ai-go"><AiGoArrow /></span>
                     </div>
-                    <div className="ai-list-item green">
+                    <div className="ai-list-item green clickable">
                         <div className="dot" />
-                        <div>
+                        <div style={{ flex: '1 1 0%' }}>
                             <div className="ai-list-item-title">Upsell: extended warranty</div>
                             <div className="ai-list-item-sub">~$2,800</div>
                         </div>
+                        <span className="ai-go"><AiGoArrow /></span>
                     </div>
                     <div className="ai-list-item amber">
                         <div className="dot" />
-                        <div>
+                        <div style={{ flex: '1 1 0%' }}>
                             <div className="ai-list-item-title">Declining engagement this quarter</div>
                         </div>
                     </div>
-                    <div className="ai-list-item violet">
+                    <div className="ai-list-item violet clickable">
                         <div className="dot" />
-                        <div>
+                        <div style={{ flex: '1 1 0%' }}>
                             <div className="ai-list-item-title">Credit utilization at limit threshold</div>
                             <div className="ai-list-item-sub">{worstUtil ? `${Math.round(worstUtil.util * 100)}%` : '50%'}</div>
                         </div>
+                        <span className="ai-go"><AiGoArrow /></span>
                     </div>
                 </div>
 
@@ -637,6 +677,20 @@ export default function FinanceAccounts() {
                     </div>
                 ))}
             </aside>
+
+            {(createFlow === 'invoice' || createFlow === 'quote') && (
+                <DocEditor
+                    mode={createFlow}
+                    onClose={() => setCreateFlow(null)}
+                    onCreated={() => navigate(createFlow === 'invoice' ? '/connect/finance/collections' : '/connect/finance/quotes')}
+                />
+            )}
+            {createFlow === 'customer' && (
+                <CreateCustomerModal
+                    onClose={() => setCreateFlow(null)}
+                    onCreated={reload}
+                />
+            )}
         </>
     );
 }

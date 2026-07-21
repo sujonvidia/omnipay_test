@@ -1,9 +1,30 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { LuPlus, LuChevronRight, LuFileText, LuReceipt, LuUserPlus } from 'react-icons/lu';
+import { FiUserPlus, FiFileText, FiCheckCircle, FiXCircle, FiPercent, FiInbox } from 'react-icons/fi';
+import CreateMenu from './CreateMenu';
 import DocEditor from './DocEditor';
 import CreateCustomerModal from './CreateCustomerModal';
+import { useRecentEvents } from '../../hooks/useRecentEvents';
+
+const HISTORY_ICON_BY_TYPE = {
+    customer_created: { Icon: FiUserPlus, color: 'violet' },
+    customer_profile_imported: { Icon: FiUserPlus, color: 'violet' },
+    quote_created: { Icon: FiFileText, color: 'amber' },
+    payment_charged: { Icon: FiCheckCircle, color: 'green' },
+    payment_declined: { Icon: FiXCircle, color: 'red' },
+    commission_recorded: { Icon: FiPercent, color: 'violet' },
+};
+
+const historyTimeAgo = (iso) => {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+};
 
 const BASE = import.meta.env.VITE_BASE_URL || '';
 const authH = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
@@ -150,50 +171,53 @@ function homeResponder(query, navigate) {
     };
 }
 
-const CREATE_OPTIONS = [
-    { key: 'invoice', icon: LuReceipt, title: 'New invoice', sub: 'Request payment from a customer' },
-    { key: 'quote', icon: LuFileText, title: 'New quote', sub: 'Send an estimate for acceptance' },
-    { key: 'customer', icon: LuUserPlus, title: 'New customer', sub: 'Add a new customer' },
-];
-
-function CreateMenu({ onPick }) {
-    const [open, setOpen] = useState(false);
-    const ref = useRef(null);
-
-    useEffect(() => {
-        const onDocClick = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-        const onKeyDown = (e) => { if (e.key === 'Escape') setOpen(false); };
-        document.addEventListener('mousedown', onDocClick);
-        document.addEventListener('keydown', onKeyDown);
-        return () => {
-            document.removeEventListener('mousedown', onDocClick);
-            document.removeEventListener('keydown', onKeyDown);
-        };
-    }, []);
-
-    const pick = (key) => { setOpen(false); onPick(key); };
+function OperationalHistoryTab() {
+    const navigate = useNavigate();
+    const { events, loading } = useRecentEvents(30);
 
     return (
-        <div className="create-menu" ref={ref}>
-            <button type="button" className="create-btn" onClick={() => setOpen(v => !v)}>
-                <LuPlus size={15} /> Create
-                <span style={{ display: 'inline-flex', transform: 'rotate(90deg)' }}>
-                    <LuChevronRight size={12} />
-                </span>
-            </button>
-            {open && (
-                <div className="create-menu-pop">
-                    {CREATE_OPTIONS.map(opt => (
-                        <button key={opt.key} type="button" className="create-opt" onClick={() => pick(opt.key)}>
-                            <span className="create-opt-icon"><opt.icon size={16} /></span>
-                            <div>
-                                <div className="create-opt-title">{opt.title}</div>
-                                <div className="create-opt-sub">{opt.sub}</div>
-                            </div>
+        <div className="summary_body">
+            <div className="card" style={{ padding: 0, marginTop: 12, overflow: 'hidden' }}>
+                {loading && (
+                    <div style={{ padding: '20px 18px', fontSize: 13, color: 'var(--text-tertiary)' }}>Loading…</div>
+                )}
+                {!loading && events.length === 0 && (
+                    <div style={{ padding: '32px 18px', textAlign: 'center', fontSize: 13, color: 'var(--text-tertiary)' }}>
+                        <FiInbox size={18} style={{ margin: '0 auto 8px', opacity: 0.5, display: 'block' }} />
+                        No activity yet — actions across quotes, invoices, and customers will show up here.
+                    </div>
+                )}
+                {!loading && events.map((e, i) => {
+                    const { Icon, color } = HISTORY_ICON_BY_TYPE[e.type] || { Icon: FiInbox, color: 'violet' };
+                    return (
+                        <button
+                            key={e.id}
+                            type="button"
+                            onClick={() => navigate(e.href)}
+                            style={{
+                                display: 'flex', alignItems: 'flex-start', gap: 12, width: '100%',
+                                padding: '14px 18px', textAlign: 'left', background: 'transparent', border: 'none', cursor: 'pointer',
+                                borderTop: i === 0 ? 'none' : '1px solid var(--border)',
+                            }}
+                            onMouseEnter={e2 => e2.currentTarget.style.background = 'var(--bg-hover)'}
+                            onMouseLeave={e2 => e2.currentTarget.style.background = 'transparent'}
+                        >
+                            <span style={{
+                                width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                background: `var(--${color}-bg)`, color: `var(--${color}-text)`,
+                            }}>
+                                <Icon size={15} />
+                            </span>
+                            <span style={{ flex: '1 1 0%', minWidth: 0 }}>
+                                <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600 }}>{e.title}</span>
+                                {e.sub && <span style={{ display: 'block', fontSize: 12.5, color: 'var(--text-tertiary)', marginTop: 2 }}>{e.sub}</span>}
+                            </span>
+                            <span style={{ fontSize: 11.5, color: 'var(--text-tertiary)', flexShrink: 0, paddingTop: 2 }}>{historyTimeAgo(e.at)}</span>
                         </button>
-                    ))}
-                </div>
-            )}
+                    );
+                })}
+            </div>
         </div>
     );
 }
@@ -517,7 +541,8 @@ export default function FinanceHome() {
 
                 <div className="tabs">
                     <div onClick={() => setTabState(1)} className={`tab ${tabState === 1 ? 'active' : ''}`}>Summary</div>
-                    <div onClick={() => setTabState(2)} className={`tab ${tabState === 2 ? 'active' : ''}`}>Gateway</div>
+                    <div onClick={() => setTabState(2)} className={`tab ${tabState === 2 ? 'active' : ''}`}>Operational History</div>
+                    <div onClick={() => setTabState(3)} className={`tab ${tabState === 3 ? 'active' : ''}`}>Gateway</div>
                 </div>
 
                 {tabState === 1 && (
@@ -743,7 +768,9 @@ export default function FinanceHome() {
                     </div>
                 )}
 
-                {tabState === 2 && (
+                {tabState === 2 && <OperationalHistoryTab />}
+
+                {tabState === 3 && (
                     <div className="summary_body">
                         <div className="card" style={{ padding: '16px 20px', marginTop: 12 }}>
                             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>CardPointe Gateway</div>

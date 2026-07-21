@@ -1054,6 +1054,27 @@ input, textarea { font-family: inherit; }
 .dlist .entity-row { border: none; border-bottom: 1px solid var(--border); border-radius: 0; margin: 0; }
 .dlist .entity-row:last-child { border-bottom: none; }
 
+/* ===== CUSTOMER PORTFOLIO TABLE ===== */
+.items-scroll { overflow-x: auto; }
+.cust-head, .cust-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 85px 75px 110px 110px 110px 120px;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 16px;
+  min-width: 940px;
+}
+.cust-head {
+  font-size: 11.5px; font-weight: 600; color: var(--text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--border);
+}
+.cust-row { border-bottom: 1px solid var(--border); }
+.cust-row:last-child { border-bottom: none; }
+.cust-row:hover { background: var(--bg-hover); }
+.cust-sort { cursor: pointer; user-select: none; }
+.cust-sort:hover { color: var(--text-primary); }
+
 /* utility */
 .flex { display: flex; }
 .flex-col { display: flex; flex-direction: column; }
