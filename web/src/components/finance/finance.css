@@ -828,6 +828,13 @@ input, textarea { font-family: inherit; }
 .row-amount-meta { font-size: 12px; color: var(--text-tertiary); text-align: right; margin-top: 2px; }
 .row-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
+/* ===== QUOTES ROW META COLUMNS ===== */
+.quote-row-meta { display: flex; align-items: center; gap: 14px; }
+.q-status-col { width: 130px; flex-shrink: 0; }
+.q-amount-col { width: 120px; text-align: right; flex-shrink: 0; }
+.q-activity-col { width: 160px; font-size: 13px; flex-shrink: 0; }
+.q-action-col { width: 90px; text-align: right; flex-shrink: 0; }
+
 /* ===== STATUS BADGES ===== */
 .badge {
   display: inline-flex; align-items: center;
@@ -1941,13 +1948,32 @@ textarea.ed-input { resize: vertical; }
   .kv-grid { grid-template-columns: 1fr; }
   .settings-split { grid-template-columns: 1fr; }
 
-  /* Data-table-style rows (e.g. Quotes) lay out several fixed-pixel-width
-     columns (set inline by the page, so this can't shrink them) in a single
-     flex line — the reliable narrow-viewport fix is to let them wrap onto
-     additional lines instead of forcing the row past the viewport. */
+  /* Generic entity rows just wrap onto extra lines on narrow viewports. */
   .entity-row { flex-wrap: wrap; row-gap: 6px; }
+
+  /* Quotes rows have a fixed-width meta group (status/amount/activity/action)
+     that must NOT wrap column-by-column — that scatters each column onto its
+     own line disconnected from the others. Instead keep the group together
+     and let it drop as a whole onto a second line, wrapping internally. */
+  .entity-row.quote-row { flex-wrap: wrap; row-gap: 10px; }
+  .quote-row-meta { width: 100%; flex-wrap: wrap; row-gap: 8px; padding-left: 50px; }
+  .q-status-col, .q-amount-col, .q-activity-col, .q-action-col {
+    width: auto; text-align: left; flex: 0 1 auto;
+  }
+
+  /* Doc editor (create invoice/quote) — side-by-side form+preview can't fit
+     a phone/tablet width, so drop the preview pane regardless of its toggle
+     state, and stack the line-item grid instead of squeezing 5 columns. */
+  .editor-preview { display: none; }
+  .editor-form-inner { padding: 20px 16px 60px; }
+  .editor-top { padding: 0 12px; gap: 8px; }
+  .editor-saved { display: none; }
+  .ed-item { grid-template-columns: 1fr; gap: 4px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .ed-item-head { display: none; }
+  .ed-item .amt { text-align: left; font-weight: 600; }
 }
 
 @media (max-width: 480px) {
+  .quote-row-meta { padding-left: 0; }
   .kpi-grid, .kpi-grid-3, .kpi-grid-2 { grid-template-columns: 1fr; }
 }

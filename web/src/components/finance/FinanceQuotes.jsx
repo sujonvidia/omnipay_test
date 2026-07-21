@@ -103,12 +103,8 @@ const styles = {
     rowMain: { flex: '1 1 0%', minWidth: '0px' },
     meta12: { fontSize: '12px' },
     rowSub: { fontSize: '13px', marginTop: '2px' },
-    statusCol: { width: '130px', flexShrink: 0 },
-    amountCol: { width: '120px', textAlign: 'right', flexShrink: 0 },
     bold: { fontWeight: 600 },
-    activityCol: { width: '160px', fontSize: '13px', flexShrink: 0 },
     noteText: { fontSize: '12.5px' },
-    actionCol: { width: '90px', textAlign: 'right', flexShrink: 0 },
     viewLink: { color: 'var(--primary)', fontSize: '13px', cursor: 'pointer' },
 }
 
@@ -350,7 +346,7 @@ export default function FinanceQuotes() {
                         </div>
                     )}
                     {filteredQuotes.map((q) => (
-                        <div className="entity-row flat" style={styles.row} key={q._id}>
+                        <div className="entity-row flat quote-row" style={styles.row} key={q._id}>
                             <div className="avatar" style={styles.avatar}>
                                 <FileIcon />
                             </div>
@@ -365,31 +361,33 @@ export default function FinanceQuotes() {
                                     <span className="truncate">{q.customer_name}</span>
                                 </div>
                             </div>
-                            <div style={styles.statusCol}>
-                                <span className={`badge ${STATUS_BADGE[q.status] || 'gray'}`}>{q.status}</span>
-                            </div>
-                            <div style={styles.amountCol}>
-                                <div style={styles.bold}>
-                                    ${parseFloat(q.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <div className="quote-row-meta">
+                                <div className="q-status-col">
+                                    <span className={`badge ${STATUS_BADGE[q.status] || 'gray'}`}>{q.status}</span>
                                 </div>
-                                {q.valid_until && (
-                                    <div className="text-meta" style={styles.meta12}>
-                                        Until {new Date(q.valid_until).toLocaleDateString()}
+                                <div className="q-amount-col">
+                                    <div style={styles.bold}>
+                                        ${parseFloat(q.total || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </div>
-                                )}
-                            </div>
-                            <div style={styles.activityCol}>
-                                <div className="text-meta" style={styles.meta12}>
-                                    {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString() : '—'}
+                                    {q.valid_until && (
+                                        <div className="text-meta" style={styles.meta12}>
+                                            Until {new Date(q.valid_until).toLocaleDateString()}
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="text-tertiary" style={styles.noteText}>{q.notes || ''}</div>
-                            </div>
-                            <div style={styles.actionCol}>
-                                {q.status === 'draft' ? (
-                                    <button className="btn btn-primary btn-sm" onClick={() => setViewQuoteId(q._id)}>Review</button>
-                                ) : (
-                                    <a style={styles.viewLink} onClick={() => setViewQuoteId(q._id)}>View →</a>
-                                )}
+                                <div className="q-activity-col">
+                                    <div className="text-meta" style={styles.meta12}>
+                                        {q.updatedAt ? new Date(q.updatedAt).toLocaleDateString() : '—'}
+                                    </div>
+                                    <div className="text-tertiary" style={styles.noteText}>{q.notes || ''}</div>
+                                </div>
+                                <div className="q-action-col">
+                                    {q.status === 'draft' ? (
+                                        <button className="btn btn-primary btn-sm" onClick={() => setViewQuoteId(q._id)}>Review</button>
+                                    ) : (
+                                        <a style={styles.viewLink} onClick={() => setViewQuoteId(q._id)}>View →</a>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ))}

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { LuPlus, LuChevronRight, LuFileText, LuReceipt, LuUserPlus } from 'react-icons/lu';
+import DocEditor from './DocEditor';
+import CreateCustomerModal from './CreateCustomerModal';
 
 const BASE = import.meta.env.VITE_BASE_URL || '';
 const authH = () => ({ Authorization: `Bearer ${localStorage.getItem('token') || ''}` });
@@ -148,7 +150,13 @@ function homeResponder(query, navigate) {
     };
 }
 
-function CreateMenu({ navigate }) {
+const CREATE_OPTIONS = [
+    { key: 'invoice', icon: LuReceipt, title: 'New invoice', sub: 'Request payment from a customer' },
+    { key: 'quote', icon: LuFileText, title: 'New quote', sub: 'Send an estimate for acceptance' },
+    { key: 'customer', icon: LuUserPlus, title: 'New customer', sub: 'Add a new customer' },
+];
+
+function CreateMenu({ onPick }) {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
 
@@ -163,7 +171,7 @@ function CreateMenu({ navigate }) {
         };
     }, []);
 
-    const go = (path) => { setOpen(false); navigate(path); };
+    const pick = (key) => { setOpen(false); onPick(key); };
 
     return (
         <div className="create-menu" ref={ref}>
@@ -174,16 +182,16 @@ function CreateMenu({ navigate }) {
                 </span>
             </button>
             {open && (
-                <div className="create-dropdown">
-                    <button type="button" className="create-dropdown-item" onClick={() => go('/connect/finance/quotes')}>
-                        <LuFileText size={15} /> New quote
-                    </button>
-                    <button type="button" className="create-dropdown-item" onClick={() => go('/connect/finance/collections')}>
-                        <LuReceipt size={15} /> New invoice
-                    </button>
-                    <button type="button" className="create-dropdown-item" onClick={() => go('/connect/finance/accounts')}>
-                        <LuUserPlus size={15} /> New customer
-                    </button>
+                <div className="create-menu-pop">
+                    {CREATE_OPTIONS.map(opt => (
+                        <button key={opt.key} type="button" className="create-opt" onClick={() => pick(opt.key)}>
+                            <span className="create-opt-icon"><opt.icon size={16} /></span>
+                            <div>
+                                <div className="create-opt-title">{opt.title}</div>
+                                <div className="create-opt-sub">{opt.sub}</div>
+                            </div>
+                        </button>
+                    ))}
                 </div>
             )}
         </div>
@@ -202,6 +210,7 @@ function greeting() {
 export default function FinanceHome() {
     const user = useSelector(s => s.message.user);
     const navigate = useNavigate();
+    const [createFlow, setCreateFlow] = useState(null); // 'invoice' | 'quote' | 'customer' | null
     const [tabState, setTabState] = useState(1);
     const [messages, setMessages] = useState([]);
     const [followUps, setFollowUps] = useState([]);
@@ -346,7 +355,7 @@ export default function FinanceHome() {
         <>
             <main className="page-main">
                 <div className="page-actions">
-                    <CreateMenu navigate={navigate} />
+                    <CreateMenu onPick={setCreateFlow} />
                 </div>
 
                 <div className="hero">
@@ -937,6 +946,20 @@ export default function FinanceHome() {
                     </div>
                 </div>
             </aside>
+
+            {(createFlow === 'invoice' || createFlow === 'quote') && (
+                <DocEditor
+                    mode={createFlow}
+                    onClose={() => setCreateFlow(null)}
+                    onCreated={() => navigate(createFlow === 'invoice' ? '/connect/finance/collections' : '/connect/finance/quotes')}
+                />
+            )}
+            {createFlow === 'customer' && (
+                <CreateCustomerModal
+                    onClose={() => setCreateFlow(null)}
+                    onCreated={() => navigate('/connect/finance/accounts')}
+                />
+            )}
         </>
     );
 }
